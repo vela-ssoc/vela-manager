@@ -1,0 +1,22 @@
+server:
+  addr: :8443               # http 服务监听地址
+  cert: zone/tls/server.crt # 留空代表使用 http 协议
+  pkey: zone/tls/server.key # 留空代表使用 http 协议
+  vhosts:
+    - 127.0.0.1
+    - subdomain.example.com
+
+database:
+  dsn: username:password@tcp(example.com:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local&timeout=10s
+  max_open_conn: 100
+  max_idle_conn: 100
+  max_lift_time: 24h
+  max_idle_time: 24h
+  user: username
+  passwd: password
+  dbname: soc
+  params:
+    charset: utf8mb4
+    parseTime: True
+    loc: Local
+    timeout: 10s
