@@ -4,9 +4,8 @@ import (
 	"crypto/tls"
 	"time"
 
-	"github.com/vela-ssoc/manager/libkit/lumber"
-
 	"github.com/go-sql-driver/mysql"
+	"github.com/vela-ssoc/manager/libkit/lumber"
 )
 
 type Config struct {
