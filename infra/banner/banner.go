@@ -2,6 +2,7 @@ package banner
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/user"
 	"runtime"
@@ -55,8 +56,8 @@ var (
 	parsed atomic.Bool
 )
 
-// Print 打印 banner 到控制台
-func Print() {
+// Print 打印 banner 到指定输出流
+func Print(w io.Writer) {
 	parse()
 
 	compile := compileTime
@@ -69,8 +70,8 @@ func Print() {
 		commit = commitAt.In(time.Local).String()
 	}
 
-	fmt.Printf(logo, runtime.GOOS, runtime.GOARCH, hostname, username,
-		pid, version, compile, commit, revision)
+	_, _ = fmt.Fprintf(w, logo, runtime.GOOS, runtime.GOARCH, hostname,
+		username, pid, version, compile, commit, revision)
 }
 
 func parse() {

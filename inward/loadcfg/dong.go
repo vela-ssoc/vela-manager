@@ -1,4 +1,4 @@
-package dongcfg
+package loadcfg
 
 import (
 	"errors"
@@ -42,8 +42,8 @@ func (dc *dongConfigure) DongConfig() (*model.Dong, error) {
 		return dc.data, dc.err
 	}
 
-	data := &model.Dong{Enable: true}
-	err := dc.db.First(data).Error
+	data := new(model.Dong)
+	err := dc.db.First(data, "enable = ?", true).Error
 	if err == gorm.ErrRecordNotFound {
 		err = ErrNotFoundDong
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/vela-ssoc/manager/infra/conf"
 )
 
+// daemonHTTP HTTP 服务
 type daemonHTTP struct {
 	config  conf.Server  // HTTP 服务启动配置
 	handler http.Handler // HTTP Handler
@@ -16,6 +17,7 @@ type daemonHTTP struct {
 	server  *http.Server // HTTP server
 }
 
+// Run 运行 HTTP 服务
 func (dh *daemonHTTP) Run() {
 	certs, err := dh.config.Certs()
 	if err != nil {
@@ -43,6 +45,7 @@ func (dh *daemonHTTP) Run() {
 	dh.errCh <- err
 }
 
+// Close 关闭 HTTP 服务
 func (dh *daemonHTTP) Close() error {
 	if srv := dh.server; srv != nil {
 		return srv.Close()

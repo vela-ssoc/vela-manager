@@ -9,11 +9,14 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Load 加载并序列化配置
 func Load(file string, v any) error {
 	open, err := os.Open(file)
 	if err != nil {
 		return err
 	}
+	//goland:noinspection GoUnhandledErrorResult
+	defer open.Close()
 
 	ext := strings.ToLower(filepath.Ext(file))
 	switch ext {
@@ -22,8 +25,6 @@ func Load(file string, v any) error {
 	default:
 		err = json.NewDecoder(open).Decode(v)
 	}
-
-	_ = open.Close()
 
 	return err
 }

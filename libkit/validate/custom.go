@@ -38,16 +38,16 @@ func requiredIfFunc(v *validator.Validate, t unt.Translator) {
 }
 
 // requiredWithoutFunc required_without 翻译
-func requiredWithoutFunc(v *validator.Validate, t unt.Translator) {
-	const tag = "required_without"
-	_ = v.RegisterTranslation(tag, t, func(ut unt.Translator) error {
-		return ut.Add(tag, "{0}为不存在时{1}必须填写", true)
-	}, func(ut unt.Translator, fe validator.FieldError) string {
-		target := fe.Param()
-		str, _ := ut.T(tag, strings.ToLower(target), fe.Field())
-		return str
-	})
-}
+//func requiredWithoutFunc(v *validator.Validate, t unt.Translator) {
+//	const tag = "required_without"
+//	_ = v.RegisterTranslation(tag, t, func(ut unt.Translator) error {
+//		return ut.Add(tag, "{0}不存在时{1}必须填写", true)
+//	}, func(ut unt.Translator, fe validator.FieldError) string {
+//		target := fe.Param()
+//		str, _ := ut.T(tag, strings.ToLower(target), fe.Field())
+//		return str
+//	})
+//}
 
 // semverFunc 语义化版本号：https://semver.org/lang/zh-CN/
 func semverFunc(v *validator.Validate, t unt.Translator) {
@@ -256,19 +256,11 @@ func filenameFunc(v *validator.Validate, t unt.Translator) {
 		}
 		// 文件名不能是系统特殊含义字符
 		ext := filepath.Ext(str) // 获取文件后缀
-		if ext == "" {
-			if isReservedName(str) {
-				return false
-			}
-		} else if strings.ToLower(ext) == ".zip" {
-			// zip 文件解压后的名字也不能是系统特殊含义字符
-			name := str[:len(str)-4]
-			if isReservedName(name) {
-				return false
-			}
+		if ext == ".zip" {       // zip 文件解压后的名字也不能是系统特殊含义字符
+			str = str[:len(str)-4]
 		}
 
-		return true
+		return !isReservedName(str)
 	})
 	_ = v.RegisterTranslation(tag, t, func(ut unt.Translator) error {
 		return ut.Add(tag, "{0}不是一个合法的文件名", true)

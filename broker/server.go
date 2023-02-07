@@ -17,10 +17,9 @@ func New(db *gorm.DB, valid validate.Validator, logger logback.Logger) http.Hand
 	sh.Logger = logger
 	sh.Validator = valid
 
-	base := sh.Group("/api")
-
-	brkapi.Ping(db).BindRoute(base)
-	brkapi.Stat().BindRoute(base)
+	rout := sh.Group("/api")
+	brkapi.Ping(db).BindRoute(rout)
+	brkapi.Stat().BindRoute(rout)
 
 	return sh
 }

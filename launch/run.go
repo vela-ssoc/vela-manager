@@ -3,16 +3,20 @@ package launch
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/vela-ssoc/manager/broker"
 	"github.com/vela-ssoc/manager/broker/blink"
 	"github.com/vela-ssoc/manager/infra/conf"
-	"github.com/vela-ssoc/manager/inward/dongcfg"
+	"github.com/vela-ssoc/manager/infra/grid"
+	"github.com/vela-ssoc/manager/infra/hanerr"
 	"github.com/vela-ssoc/manager/inward/evtrsk"
+	"github.com/vela-ssoc/manager/inward/loadcfg"
 	"github.com/vela-ssoc/manager/inward/plate"
 	"github.com/vela-ssoc/manager/inward/recisub"
+	"github.com/vela-ssoc/manager/inward/sessm"
 	"github.com/vela-ssoc/manager/libkit/httpclient"
 	"github.com/vela-ssoc/manager/libkit/profile"
 	"github.com/vela-ssoc/manager/libkit/validate"
@@ -26,7 +30,6 @@ import (
 )
 
 // Run 项目启动
-// 本项目各个组件依赖关系尽可能
 func Run(parent context.Context, file string) error {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
@@ -42,44 +45,101 @@ func Run(parent context.Context, file string) error {
 	}
 
 	// 连接数据库
-	dsn := cfg.Database.DSN
-	dlg := logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
-		SlowThreshold:             200 * time.Millisecond,
-		LogLevel:                  logger.Info,
-		IgnoreRecordNotFoundError: false,
-		Colorful:                  true,
+	dbCfg := cfg.Database
+	dsn := dbCfg.FormatDSN() // 获取数据库的 DSN
+	dlg := logger.New(log.New(os.Stdout, "[gorm] ", log.LstdFlags), logger.Config{
+		SlowThreshold: 100 * time.Millisecond,
+		LogLevel:      logger.Info,
+		Colorful:      true,
 	})
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: dlg})
 	if err != nil {
 		return err
 	}
+	rawDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	rawDB.SetMaxIdleConns(dbCfg.MaxIdleConn)
+	rawDB.SetMaxOpenConns(dbCfg.MaxOpenConn)
+	rawDB.SetConnMaxLifetime(dbCfg.MaxLifeTime)
+	rawDB.SetConnMaxIdleTime(dbCfg.MaxIdleTime)
 
-	httpCli := httpclient.NewClient()                    // 创建全局公用的 http client
-	rend := plate.Rend(db)                               // 通知模板渲染器
-	dongCfg := dongcfg.Dong(db)                          // 咚咚服务号配置加载器
-	dongSend := sendto.Dong(dongCfg, httpCli)            // 咚咚通知推送客户端
-	postman := sendto.Postman(sendto.WithDong(dongSend)) // 全局通知推送模块
-	subs := recisub.Subscribe(db)                        // 事件订阅者
+	// logback.New(cfg.Logger)
+	gfs := grid.NewCDN(rawDB, dbCfg.CDN, 0)      // 文件存储模块
+	httpCli := httpclient.NewClient()            // 创建全局公用的 http client
+	rend := plate.DBTmpl(db)                     // 通知模板渲染器
+	dongCfg := loadcfg.Dong(db)                  // 咚咚服务号配置加载器
+	alertCfg := loadcfg.Alert(db)                // 自动化运维告警配置加载器
+	dongSend := sendto.Dong(dongCfg, httpCli)    // 咚咚通知推送客户端
+	alertSend := sendto.Alert(alertCfg, httpCli) // 自动化运维告警推送客户端
 
-	sh := ship.Default()
-	sh.Validator = valid
-	group := sh.Group("/api")
-	anon := group.Clone()
-	auth := group.Use(middle.Auth()) // 需要认证的路由组
+	dongOpt := sendto.WithDong(dongSend)
+	emailOpt := sendto.WithEmail(alertSend)
+	wechatOpt := sendto.WithWechat(alertSend)
+	smsOpt := sendto.WithSMS(alertSend)
+	phoneOpt := sendto.WithPhone(alertSend)
+	postman := sendto.Postman(dongOpt, emailOpt, wechatOpt, smsOpt, phoneOpt) // 全局通知推送模块
+	subs := recisub.Subscribe(db)                                             // 事件订阅者
+	notice := evtrsk.NewHandle(db, subs, rend, postman)                       // 事件/风险通知处理器
+
+	srvCfg := cfg.Server
+	sess := sessm.DBSess(db, srvCfg.Sess) // session 管理器
+
+	hostHandler := ship.Default()
+	downHandler := ship.Default()
+
+	hostHandler.Session = sess
+	downHandler.Session = sess
+	hostHandler.Validator = valid
+	downHandler.Validator = valid
+	hostHandler.HandleError = hanerr.Handle
+	downHandler.HandleError = hanerr.Handle
+	if dir := srvCfg.HTML; dir != "" {
+		// 设置静态代理目录，downHandler 不用设置，
+		// 设置 vhost 的目的就是为了防止扫描器直接
+		// 扫描 IP 就将我们的网站扫出来
+		hostHandler.Route("/").Static(dir)
+	}
+
+	midAuth := middle.Auth()
+	hostGroup := hostHandler.Group("/api")
+	downGroup := downHandler.Group("/api")
+	hostAnon := hostGroup.Clone()
+	downAnon := downGroup.Clone()
+	hostAuth := hostGroup.Use(midAuth)
+	downAuth := downGroup.Use(midAuth)
 
 	// broker 节点接入相关
 	brk := broker.New(db, valid, nil)
-
-	notice := evtrsk.NewHandle(db, subs, rend, postman)
 	hub := blink.Hub(db, notice, brk)
 	hub.Reset() // 将所有 broker 置为离线状态
 	joiner := blink.Gateway(hub)
-	mgtapi.Blink(joiner).BindRoute(anon, auth)
+	link := mgtapi.Blink(joiner)
+	link.BindRoute(hostAnon, hostAuth)
+
+	dep := mgtapi.Deploy(db, gfs)
+	dep.BindRoute(hostAnon, hostAuth)
+	dep.BindRoute(downAnon, downAuth)
+
+	var handler http.Handler
+	if vhosts := srvCfg.Vhosts; len(vhosts) == 0 {
+		handler = hostHandler
+	} else {
+		mana := ship.NewHostManagerHandler(nil)
+		for _, host := range vhosts {
+			if _, err = mana.AddHost(host, hostHandler); err != nil {
+				return err
+			}
+		}
+		mana.SetDefaultHost("", downHandler)
+		handler = mana
+	}
 
 	errCh := make(chan error)
 	daemon := &daemonHTTP{
-		config:  cfg.Server,
-		handler: sh,
+		config:  srvCfg,
+		handler: handler,
 		errCh:   errCh,
 	}
 	go daemon.Run() // 运行 HTTP 服务
@@ -87,16 +147,11 @@ func Run(parent context.Context, file string) error {
 	select {
 	case err = <-errCh:
 	case <-ctx.Done():
-		err = ctx.Err()
 	}
 	_ = daemon.Close()
 
-	hub.Reset() // 将所有 broker 置为离线状态
-
-	// 关闭数据库连接
-	if sdb, _ := db.DB(); sdb != nil {
-		_ = sdb.Close()
-	}
+	hub.Reset()       // 将所有 broker 置为离线状态
+	_ = rawDB.Close() // 关闭数据库连接
 
 	return err
 }

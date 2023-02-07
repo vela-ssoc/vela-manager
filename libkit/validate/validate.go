@@ -22,14 +22,12 @@ type validate struct {
 
 // Validate 校验参数
 func (vd *validate) Validate(v any) error {
-	err := vd.valid.Var(v, "dive")
-	switch ev := err.(type) {
-	case validator.ValidationErrors:
-		trans := ev.Translate(vd.tran)
-		return &TranError{trans: trans}
-	default:
-		return ev
+	err := vd.valid.Struct(v)
+	if ve, ok := err.(validator.ValidationErrors); ok {
+		trans := ve.Translate(vd.tran)
+		return &TranError{trans: trans, valid: ve}
 	}
+	return err
 }
 
 func (vd *validate) register(fn func(v *validator.Validate, t ut.Translator)) {
@@ -81,7 +79,7 @@ func New() Validator {
 	vd.register(tagFunc)
 	vd.register(uniqueFunc)
 	vd.register(requiredIfFunc)
-	vd.register(requiredWithoutFunc)
+	// vd.register(requiredWithoutFunc)
 	vd.register(semverFunc)
 
 	return vd

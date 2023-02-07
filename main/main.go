@@ -12,15 +12,14 @@ import (
 	"github.com/vela-ssoc/manager/launch"
 )
 
+// main 安全平台管理端
 func main() {
 	// 处理命令行输入的参数
-	var config string
-	var version bool
-	flag.StringVar(&config, "c", "zone/conf/manager.yaml", "配置文件")
-	flag.BoolVar(&version, "v", false, "打印版本号")
+	ver := flag.Bool("v", false, "打印版本号并退出")
+	cfg := flag.String("c", "zone/conf/manager.yaml", "配置文件路径")
 	flag.Parse()
 
-	if banner.Print(); version {
+	if banner.Print(os.Stdout); *ver {
 		return
 	}
 
@@ -30,7 +29,7 @@ func main() {
 	defer cancel()
 	log.Println("按 Ctrl+C 结束运行")
 
-	if err := launch.Run(ctx, config); err != nil && err != context.Canceled {
+	if err := launch.Run(ctx, *cfg); err != nil {
 		log.Println(err)
 	}
 

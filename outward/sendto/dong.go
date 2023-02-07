@@ -92,17 +92,20 @@ func (de *DongError) Error() string {
 	return fmt.Sprintf("咚咚服务器返回错误 [%s]: %s, %s", de.Code, de.Msg, de.Cause)
 }
 
+// dongRequest 咚咚通知请求报文
 type dongRequest struct {
 	UserIDs string `json:"userIds"` // 消息接收用户，多个 以,隔开（groupIds 为 空时必填）
 	Title   string `json:"title"`   // 标题（必填）长度：300 个字符（150 个中文）
 	Detail  string `json:"detail"`  // 卡片消息详细（必填）长度限制：2000 个字符（中文：1000 个）支持 html 标签
 }
 
+// dongResponse 咚咚通知请求报文
 type dongResponse struct {
 	Code string `json:"code"` // 请求返回码
 	Msg  string `json:"msg"`  // 请求返回消息
 }
 
+// Error 判断响应是否包含错误
 func (dr dongResponse) Error() error {
 	code := dr.Code
 	if code == "200" {
