@@ -58,13 +58,13 @@ func (gw *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 鉴权
-	grant, header, gex := gw.joiner.Auth(ident)
+	issue, header, gex := gw.joiner.Auth(ident)
 	if gex != nil {
 		gw.writeError(w, http.StatusBadRequest, "认证失败：%s", gex.Error())
 		return
 	}
 
-	dat, err := json.Marshal(grant)
+	dat, err := encipher.EncryptJSON(issue)
 	if err != nil {
 		gw.writeError(w, http.StatusInternalServerError, "内部错误：%s", err.Error())
 		return
@@ -103,7 +103,7 @@ func (gw *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = gw.joiner.Join(conn, ident, grant); err != nil {
+	if err = gw.joiner.Join(conn, ident, issue); err != nil {
 		_ = conn.Close()
 	}
 }

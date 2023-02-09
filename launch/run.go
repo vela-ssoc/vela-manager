@@ -117,6 +117,8 @@ func Run(parent context.Context, file string) error {
 	joiner := blink.Gateway(hub)
 	link := mgtapi.Blink(joiner)
 	link.BindRoute(hostAnon, hostAuth)
+	mgtapi.Attach(hub).BindRoute(hostAnon, hostAuth)
+	mgtapi.WebDAV("/", hub).BindRoute(hostAnon, hostAuth)
 
 	dep := mgtapi.Deploy(db, gfs)
 	dep.BindRoute(hostAnon, hostAuth)

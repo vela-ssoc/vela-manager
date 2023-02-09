@@ -1,3 +1,5 @@
 package blink
 
-type Grant struct{}
+type Issue struct {
+	Passwd []byte `json:"passwd"`
+}

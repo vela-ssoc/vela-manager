@@ -33,8 +33,8 @@ type sessDB struct {
 
 // GetSession 根据 token 获取 session 信息
 func (ssd *sessDB) GetSession(token string) (any, error) {
-	info := &model.Userinfo{Token: token}
-	if err := ssd.db.First(info).Error; err != nil {
+	info := new(model.Userinfo)
+	if err := ssd.db.Where("token = ?", token).First(info).Error; err != nil {
 		return nil, ship.ErrSessionNotExist
 	}
 	// 检查 session 是否有效
@@ -56,7 +56,7 @@ func (ssd *sessDB) GetSession(token string) (any, error) {
 	}
 	if renew {
 		ssd.db.Model(info).
-			Where("id = ? AND token = ?", info.ID, info.Token).
+			Where("token = ?", info.Token).
 			UpdateColumn("lasted_at", now)
 	}
 

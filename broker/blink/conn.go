@@ -9,19 +9,19 @@ import (
 type Broker interface {
 	ID() int64
 	Ident() Ident
-	Grant() Grant
+	Issue() Issue
 }
 
 type connect struct {
 	ident  Ident
-	grant  Grant
+	issue  Issue
 	mux    spdy.Muxer
 	waiter *brkHub
 }
 
 func (c *connect) ID() int64    { return c.ident.ID }
 func (c *connect) Ident() Ident { return c.ident }
-func (c *connect) Grant() Grant { return c.grant }
+func (c *connect) Issue() Issue { return c.issue }
 
 func Ctx(ctx context.Context) Broker {
 	if ctx != nil {

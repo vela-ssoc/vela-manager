@@ -1,16 +1,23 @@
 package blink
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
+	"io"
+	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/dfcfw/spdy"
 	"github.com/vela-ssoc/manager/inward/evtrsk"
+	"github.com/vela-ssoc/manager/libkit/httpclient"
 	"github.com/vela-ssoc/manager/model"
 	"gorm.io/gorm"
 )
@@ -24,16 +31,26 @@ var (
 type Huber interface {
 	Joiner
 	Reset()
+	Fetch(context.Context, int64, Operator, io.Reader) (*http.Response, error)
 }
 
 // Hub broker 节点的连接中心
 func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler) Huber {
-	return &brkHub{
+	random := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	hub := &brkHub{
 		db:      db,
 		notice:  notice,
 		handler: handler,
 		brokers: make(map[int64]*connect, 16), // 一般不会超过 16 个 broker
+		random:  random,
 	}
+	transport := &http.Transport{DialContext: hub.dialContext}
+	cli := &http.Client{Transport: transport}
+	client := httpclient.NewClient(cli)
+	hub.client = client
+
+	return hub
 }
 
 type brkHub struct {
@@ -42,6 +59,8 @@ type brkHub struct {
 	handler http.Handler
 	mutex   sync.RWMutex
 	brokers map[int64]*connect
+	client  httpclient.Client
+	random  *rand.Rand
 }
 
 func (bh *brkHub) Auth(ident Ident) (any, http.Header, error) {
@@ -61,17 +80,22 @@ func (bh *brkHub) Auth(ident Ident) (any, http.Header, error) {
 		return nil, nil, ErrBrokerRepeat
 	}
 
-	return Grant{}, nil, nil
+	psz := bh.random.Intn(17) + 32
+	passwd := make([]byte, psz)
+	_, _ = bh.random.Read(passwd)
+	issue := Issue{Passwd: passwd}
+
+	return issue, nil, nil
 }
 
 func (bh *brkHub) Join(tran net.Conn, ident Ident, ret any) error {
-	grant := ret.(Grant)
-	mux := spdy.Server(tran)
+	issue := ret.(Issue)
+	mux := spdy.Server(tran, spdy.WithEncrypt(issue.Passwd))
 
 	id := ident.ID
 	conn := &connect{
 		ident:  ident,
-		grant:  grant,
+		issue:  issue,
 		waiter: bh,
 		mux:    mux,
 	}
@@ -150,6 +174,11 @@ func (bh *brkHub) Reset() {
 		UpdateColumn("status", false)
 }
 
+func (bh *brkHub) Fetch(ctx context.Context, id int64, op Operator, body io.Reader) (*http.Response, error) {
+	req := bh.newRequest(ctx, id, op, body)
+	return bh.client.Fetch(req)
+}
+
 // getConn 通过 ID 获取连接
 func (bh *brkHub) getConn(id int64) *connect {
 	bh.mutex.RLock()
@@ -183,4 +212,69 @@ func (bh *brkHub) delConn(id int64) bool {
 	bh.mutex.Unlock()
 
 	return exist
+}
+
+func (bh *brkHub) dialContext(_ context.Context, _, addr string) (net.Conn, error) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	id, _ := strconv.ParseInt(host, 10, 64)
+	if conn := bh.getConn(id); conn != nil {
+		return conn.mux.Dial()
+	}
+
+	return nil, net.ErrClosed
+}
+
+func (*brkHub) newRequest(ctx context.Context, id int64, op Operator, body io.Reader) *http.Request {
+	method := op.Method()
+	path := op.Path()
+
+	host := strconv.FormatInt(id, 10)
+	addr := &url.URL{Scheme: "http", Host: host, Path: path}
+	req := &http.Request{
+		Method:     method,
+		URL:        addr,
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Header:     make(http.Header),
+	}
+
+	if v, ok := body.(interface{ Len() int }); ok {
+		req.ContentLength = int64(v.Len())
+	}
+	switch v := body.(type) {
+	case nil:
+	case io.ReadCloser:
+		req.Body = v
+	case *bytes.Buffer:
+		req.Body = io.NopCloser(v)
+	case *bytes.Reader:
+		req.Body = io.NopCloser(v)
+	case *strings.Reader:
+		req.Body = io.NopCloser(v)
+	default:
+		req.ContentLength = -1
+		req.Body = io.NopCloser(body)
+	}
+
+	// For client requests, Request.ContentLength of 0
+	// means either actually 0, or unknown. The only way
+	// to explicitly say that the ContentLength is zero is
+	// to set the Body to nil. But turns out too much code
+	// depends on NewRequest returning a non-nil Body,
+	// so we use a well-known ReadCloser variable instead
+	// and have the http package also treat that sentinel
+	// variable to mean explicitly zero.
+	if req.Body != nil && req.ContentLength == 0 {
+		req.Body = http.NoBody
+	}
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	return req.WithContext(ctx)
 }
