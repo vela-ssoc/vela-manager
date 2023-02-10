@@ -1,8 +1,8 @@
 server:
-  addr: :8443               # http 服务监听地址
-  cert: zone/tls/server.crt # 留空代表使用 http 协议
-  pkey: zone/tls/server.key # 留空代表使用 http 协议
-  vhosts:
+  addr: :8443               # http 服务监听地址，如果不填写则 http 为 80，https 为 443
+  cert: zone/tls/server.crt # 留空代表启动 http 服务，cert 和 pkey 都有效代表启动 https 服务
+  pkey: zone/tls/server.key # 留空代表启动 http 服务，cert 和 pkey 都有效代表启动 https 服务
+  vhosts:                   # vhosts 虚拟主机头，留空代表不校验虚拟主机头
     - 127.0.0.1
     - subdomain.example.com
 
