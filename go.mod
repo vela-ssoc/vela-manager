@@ -8,7 +8,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1
 	github.com/go-playground/validator/v10 v10.11.2
 	github.com/go-sql-driver/mysql v1.7.0
-	github.com/xgfone/ship/v5 v5.2.2
+	github.com/xgfone/ship/v5 v5.3.1
 	github.com/yuin/gopher-lua v1.1.0
 	go.uber.org/zap v1.24.0
 	golang.org/x/net v0.6.0
