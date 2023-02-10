@@ -23,15 +23,17 @@ import (
 )
 
 var (
-	ErrBrokerNotFound = errors.New("broker 节点不存在")
-	ErrBrokerRepeat   = errors.New("broker 节点重复连接")
-	ErrBrokerInet     = errors.New("broker IP 不合法")
+	ErrBrokerNotFound    = errors.New("broker 节点不存在")
+	ErrBrokerRepeat      = errors.New("broker 节点重复连接")
+	ErrBrokerInet        = errors.New("broker IP 不合法")
+	ErrBrokerUnconnected = errors.New("broker 节点尚未连接")
 )
 
 type Huber interface {
 	Joiner
 	Reset()
 	Fetch(context.Context, int64, Operator, io.Reader) (*http.Response, error)
+	TunHTTP(bid string, op Operator, req *http.Request, res http.ResponseWriter) error
 }
 
 // Hub broker 节点的连接中心
@@ -179,6 +181,25 @@ func (bh *brkHub) Fetch(ctx context.Context, id int64, op Operator, body io.Read
 	return bh.client.Fetch(req)
 }
 
+// TunHTTP ss
+func (bh *brkHub) TunHTTP(bid string, op Operator, req *http.Request, res http.ResponseWriter) error {
+	req.URL.Scheme = "http"
+	req.URL.Host = bid
+	req.URL.Path = op.Path()
+	req.RequestURI = ""
+	ret, err := bh.client.Fetch(req)
+	if err != nil {
+		return err
+	}
+	for k, v := range ret.Header {
+		res.Header().Set(k, strings.Join(v, ", "))
+	}
+	res.WriteHeader(ret.StatusCode)
+	_, err = io.Copy(res, ret.Body)
+
+	return err
+}
+
 // getConn 通过 ID 获取连接
 func (bh *brkHub) getConn(id int64) *connect {
 	bh.mutex.RLock()
@@ -217,14 +238,14 @@ func (bh *brkHub) delConn(id int64) bool {
 func (bh *brkHub) dialContext(_ context.Context, _, addr string) (net.Conn, error) {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
-		return nil, err
+		return nil, net.InvalidAddrError(addr)
 	}
 	id, _ := strconv.ParseInt(host, 10, 64)
 	if conn := bh.getConn(id); conn != nil {
 		return conn.mux.Dial()
 	}
 
-	return nil, net.ErrClosed
+	return nil, ErrBrokerUnconnected
 }
 
 func (*brkHub) newRequest(ctx context.Context, id int64, op Operator, body io.Reader) *http.Request {
