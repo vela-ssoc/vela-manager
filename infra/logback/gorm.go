@@ -12,8 +12,24 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func GORM() logger.Interface {
-	return &gormLog{}
+func GORM(l *zap.Logger, level string) logger.Interface {
+	lvl := logger.Error
+	switch strings.ToLower(level) {
+	case "info":
+		lvl = logger.Info
+	case "warn":
+		lvl = logger.Warn
+	case "error":
+		lvl = logger.Error
+	}
+
+	return &gormLog{
+		zlog:                      l,
+		level:                     lvl,
+		slowThreshold:             200 * time.Millisecond,
+		skipCallerLookup:          false,
+		ignoreRecordNotFoundError: true,
+	}
 }
 
 type gormLog struct {
