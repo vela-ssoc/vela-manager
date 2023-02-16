@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/dfcfw/spdy"
+	"github.com/vela-ssoc/manager/infra/conf"
 	"github.com/vela-ssoc/manager/inward/evtrsk"
 	"github.com/vela-ssoc/manager/libkit/httpclient"
 	"github.com/vela-ssoc/manager/model"
@@ -37,7 +38,7 @@ type Huber interface {
 }
 
 // Hub broker 节点的连接中心
-func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler) Huber {
+func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Config) Huber {
 	random := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	hub := &brkHub{
@@ -45,6 +46,7 @@ func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler) Huber {
 		notice:  notice,
 		handler: handler,
 		brokers: make(map[int64]*connect, 16), // 一般不会超过 16 个 broker
+		cfg:     cfg,
 		random:  random,
 	}
 	transport := &http.Transport{DialContext: hub.dialContext}
@@ -62,6 +64,7 @@ type brkHub struct {
 	mutex   sync.RWMutex
 	brokers map[int64]*connect
 	client  httpclient.Client
+	cfg     conf.Config
 	random  *rand.Rand
 }
 
@@ -85,7 +88,13 @@ func (bh *brkHub) Auth(ident Ident) (any, http.Header, error) {
 	psz := bh.random.Intn(17) + 32
 	passwd := make([]byte, psz)
 	_, _ = bh.random.Read(passwd)
-	issue := Issue{Passwd: passwd}
+	issue := Issue{
+		Name:     brk.Name,
+		Passwd:   passwd,
+		Listen:   Listen{Addr: ":8180"},
+		Logger:   bh.cfg.Logger,
+		Database: bh.cfg.Database,
+	}
 
 	return issue, nil, nil
 }

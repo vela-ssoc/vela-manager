@@ -37,7 +37,7 @@ func Run(parent context.Context, file string) error {
 	}
 
 	zap := cfg.Logger.Zap()
-	sugar := logback.Sugar(zap)
+	slog := logback.Sugar(zap)
 
 	valid := validate.New()                     // 参数校验器
 	if err := valid.Validate(cfg); err != nil { // 对加载的配置校验
@@ -87,8 +87,8 @@ func Run(parent context.Context, file string) error {
 
 	hostHandler.Session = sess
 	downHandler.Session = sess
-	hostHandler.Logger = sugar
-	downHandler.Logger = sugar
+	hostHandler.Logger = slog
+	downHandler.Logger = slog
 	hostHandler.Validator = valid
 	downHandler.Validator = valid
 	hostHandler.HandleError = hanerr.Handle
@@ -113,8 +113,8 @@ func Run(parent context.Context, file string) error {
 	ping.BindRoute(downAnon, downAuth)
 
 	// broker 节点接入相关
-	brk := broker.New(db, valid, nil)
-	hub := blink.Hub(db, notice, brk)
+	brk := broker.New(db, valid, slog)
+	hub := blink.Hub(db, notice, brk, cfg)
 	hub.Reset() // 将所有 broker 置为离线状态
 	joiner := blink.Gateway(hub)
 	link := mgtapi.Blink(joiner)
