@@ -12,6 +12,7 @@ require (
 	github.com/yuin/gopher-lua v1.1.0
 	go.uber.org/zap v1.24.0
 	golang.org/x/net v0.7.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v2 v2.4.0
 	gorm.io/driver/mysql v1.4.6
 	gorm.io/gorm v1.24.5
