@@ -2,16 +2,14 @@ package launch
 
 import (
 	"context"
-	"log"
 	"net/http"
-	"os"
-	"time"
 
 	"github.com/vela-ssoc/manager/broker"
 	"github.com/vela-ssoc/manager/broker/blink"
 	"github.com/vela-ssoc/manager/infra/conf"
 	"github.com/vela-ssoc/manager/infra/grid"
 	"github.com/vela-ssoc/manager/infra/hanerr"
+	"github.com/vela-ssoc/manager/infra/logback"
 	"github.com/vela-ssoc/manager/inward/evtrsk"
 	"github.com/vela-ssoc/manager/inward/loadcfg"
 	"github.com/vela-ssoc/manager/inward/plate"
@@ -26,7 +24,6 @@ import (
 	"github.com/xgfone/ship/v5"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 // Run 项目启动
@@ -39,6 +36,9 @@ func Run(parent context.Context, file string) error {
 		return err
 	}
 
+	zap := cfg.Logger.Zap()
+	sugar := logback.Sugar(zap)
+
 	valid := validate.New()                     // 参数校验器
 	if err := valid.Validate(cfg); err != nil { // 对加载的配置校验
 		return err
@@ -46,13 +46,9 @@ func Run(parent context.Context, file string) error {
 
 	// 连接数据库
 	dbCfg := cfg.Database
+	glg := logback.GORM(zap, dbCfg.Level)
 	dsn := dbCfg.FormatDSN() // 获取数据库的 DSN
-	dlg := logger.New(log.New(os.Stdout, "[gorm] ", log.LstdFlags), logger.Config{
-		SlowThreshold: 100 * time.Millisecond,
-		LogLevel:      logger.Info,
-		Colorful:      true,
-	})
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: dlg})
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: glg})
 	if err != nil {
 		return err
 	}
@@ -91,6 +87,8 @@ func Run(parent context.Context, file string) error {
 
 	hostHandler.Session = sess
 	downHandler.Session = sess
+	hostHandler.Logger = sugar
+	downHandler.Logger = sugar
 	hostHandler.Validator = valid
 	downHandler.Validator = valid
 	hostHandler.HandleError = hanerr.Handle
@@ -109,6 +107,10 @@ func Run(parent context.Context, file string) error {
 	downAnon := downGroup.Clone()
 	hostAuth := hostGroup.Use(midAuth)
 	downAuth := downGroup.Use(midAuth)
+
+	ping := mgtapi.Ping()
+	ping.BindRoute(hostAnon, hostAuth)
+	ping.BindRoute(downAnon, downAuth)
 
 	// broker 节点接入相关
 	brk := broker.New(db, valid, nil)
@@ -154,6 +156,7 @@ func Run(parent context.Context, file string) error {
 
 	hub.Reset()       // 将所有 broker 置为离线状态
 	_ = rawDB.Close() // 关闭数据库连接
+	_ = zap.Sync()    // sync 日志缓冲区
 
 	return err
 }
