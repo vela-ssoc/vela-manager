@@ -34,7 +34,7 @@ type Huber interface {
 	Joiner
 	Reset()
 	Fetch(context.Context, int64, Operator, io.Reader) (*http.Response, error)
-	TunHTTP(bid string, op Operator, req *http.Request, res http.ResponseWriter) error
+	Through(bid string, op Operator, req *http.Request, res http.ResponseWriter) error
 }
 
 // Hub broker 节点的连接中心
@@ -68,6 +68,7 @@ type brkHub struct {
 	random  *rand.Rand
 }
 
+// Auth 鉴权授权管理
 func (bh *brkHub) Auth(ident Ident) (any, http.Header, error) {
 	id, secret, inet := ident.ID, ident.Secret, ident.IP
 	if len(inet) == 0 || inet.IsLoopback() {
@@ -85,7 +86,8 @@ func (bh *brkHub) Auth(ident Ident) (any, http.Header, error) {
 		return nil, nil, ErrBrokerRepeat
 	}
 
-	psz := bh.random.Intn(17) + 32
+	// 随机生成一个 32-64 位的加密密钥
+	psz := bh.random.Intn(33) + 32
 	passwd := make([]byte, psz)
 	_, _ = bh.random.Read(passwd)
 	issue := Issue{
@@ -190,8 +192,8 @@ func (bh *brkHub) Fetch(ctx context.Context, id int64, op Operator, body io.Read
 	return bh.client.Fetch(req)
 }
 
-// TunHTTP ss
-func (bh *brkHub) TunHTTP(bid string, op Operator, req *http.Request, res http.ResponseWriter) error {
+// Through ss
+func (bh *brkHub) Through(bid string, op Operator, req *http.Request, res http.ResponseWriter) error {
 	req.URL.Scheme = "http"
 	req.URL.Host = bid
 	req.URL.Path = op.Path()

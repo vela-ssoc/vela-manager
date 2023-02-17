@@ -27,19 +27,19 @@ type webdavCtrl struct {
 }
 
 func (wdc *webdavCtrl) BindRoute(anon, _ *ship.RouteGroupBuilder) {
-	methods := []string{
-		http.MethodOptions, http.MethodGet, http.MethodHead, http.MethodPost, http.MethodDelete,
-		http.MethodPut, "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK", "PROPFIND", "PROPPATCH",
-	}
+	//methods := []string{
+	//	http.MethodOptions, http.MethodGet, http.MethodHead, http.MethodPost, http.MethodDelete,
+	//	http.MethodPut, "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK", "PROPFIND", "PROPPATCH",
+	//}
 
-	group := anon.Group("/webdav")
+	// group := anon.Group("/webdav")
 	// group.Use(wdc.BasicAuth)
-	group.Route("/manager").Method(wdc.Manager, methods...)
-	group.Route("/manager/*path").Method(wdc.Manager, methods...)
-	group.Route("/broker/:bid").Method(wdc.Broker, methods...)
-	group.Route("/broker/:bid/*path").Method(wdc.Broker, methods...)
-	group.Route("/broker/:mid").Method(wdc.Minion, methods...)
-	group.Route("/broker/:mid/*path").Method(wdc.Minion, methods...)
+	// group.Route("/manager").Method(wdc.Manager, methods...)
+	// group.Route("/manager/*path").Method(wdc.Manager, methods...)
+	// group.Route("/broker/:bid").Method(wdc.Broker, methods...)
+	// group.Route("/broker/:bid/*path").Method(wdc.Broker, methods...)
+	// group.Route("/minion/:mid").Method(wdc.Minion, methods...)
+	// group.Route("/minion/:mid/*path").Method(wdc.Minion, methods...)
 }
 
 // BasicAuth 中间件，webdav 只支持 BasicAuth 认证授权，
@@ -76,7 +76,7 @@ func (wdc *webdavCtrl) Broker(c *ship.Context) error {
 	path := c.Param("path")
 	method := c.Method()
 	op := blink.NewOp(method, "/api/webdav/broker/"+path, "broker webdav")
-	err := wdc.hub.TunHTTP(bid, op, c.Request(), c.Response())
+	err := wdc.hub.Through(bid, op, c.Request(), c.Response())
 
 	return err
 }

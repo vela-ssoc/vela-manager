@@ -36,18 +36,19 @@ func Run(parent context.Context, file string) error {
 		return err
 	}
 
-	zap := cfg.Logger.Zap()
-	slog := logback.Sugar(zap)
-
+	// ----------[ 校验配置 ]----------
 	valid := validate.New()                     // 参数校验器
 	if err := valid.Validate(cfg); err != nil { // 对加载的配置校验
 		return err
 	}
+	// ----------[ 根据配置文件初始化日志 ]----------
+	zap := cfg.Logger.Zap()    // 根据配置初始化 zap 日志
+	slog := logback.Sugar(zap) // 实例化日志
 
-	// 连接数据库
+	// ----------[ 根据配置初始化 gorm 日志并连接数据库 ]----------
 	dbCfg := cfg.Database
-	glg := logback.GORM(zap, dbCfg.Level)
-	dsn := dbCfg.FormatDSN() // 获取数据库的 DSN
+	glg := logback.GORM(zap, dbCfg.Level) // 初始化 gorm 日志
+	dsn := dbCfg.FormatDSN()              // 获取数据库的 DSN
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: glg})
 	if err != nil {
 		return err
@@ -56,12 +57,12 @@ func Run(parent context.Context, file string) error {
 	if err != nil {
 		return err
 	}
+	// ----------[ 设置连接参数 ]----------
 	rawDB.SetMaxIdleConns(dbCfg.MaxIdleConn)
 	rawDB.SetMaxOpenConns(dbCfg.MaxOpenConn)
 	rawDB.SetConnMaxLifetime(dbCfg.MaxLifeTime)
 	rawDB.SetConnMaxIdleTime(dbCfg.MaxIdleTime)
 
-	// logback.New(cfg.Logger)
 	gfs := grid.NewCDN(rawDB, dbCfg.CDN, 0)      // 文件存储模块
 	httpCli := httpclient.NewClient()            // 创建全局公用的 http client
 	rend := plate.DBTmpl(db)                     // 通知模板渲染器
@@ -148,15 +149,17 @@ func Run(parent context.Context, file string) error {
 	}
 	go daemon.Run() // 运行 HTTP 服务
 
+	// ----------[ 等待错误信息/结束信号 ]----------
 	select {
 	case err = <-errCh:
 	case <-ctx.Done():
 	}
-	_ = daemon.Close()
 
-	hub.Reset()       // 将所有 broker 置为离线状态
-	_ = rawDB.Close() // 关闭数据库连接
-	_ = zap.Sync()    // sync 日志缓冲区
+	// ----------[ 程序执行结束关闭资源 ]----------
+	_ = daemon.Close() // 关闭 HTTP 服务
+	hub.Reset()        // 将所有 broker 置为离线状态
+	_ = rawDB.Close()  // 关闭数据库连接
+	_ = zap.Sync()     // sync 日志缓冲区
 
 	return err
 }
