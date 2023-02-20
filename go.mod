@@ -1,4 +1,4 @@
-module github.com/vela-ssoc/manager
+module github.com/vela-ssoc/vela-manager
 
 go 1.20
 

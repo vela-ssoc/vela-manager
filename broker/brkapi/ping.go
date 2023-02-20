@@ -3,8 +3,8 @@ package brkapi
 import (
 	"time"
 
-	"github.com/vela-ssoc/manager/broker/blink"
-	"github.com/vela-ssoc/manager/model"
+	"github.com/vela-ssoc/backend-common/model"
+	"github.com/vela-ssoc/vela-manager/broker/blink"
 	"github.com/xgfone/ship/v5"
 	"gorm.io/gorm"
 )

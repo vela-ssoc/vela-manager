@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/vela-ssoc/manager/libkit/httpclient"
-	"github.com/vela-ssoc/manager/model"
+	"github.com/vela-ssoc/backend-common/model"
+	"github.com/vela-ssoc/vela-manager/libkit/httpclient"
 )
 
 // AlertConfigurer 运维中心告警平台配置

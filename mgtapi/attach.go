@@ -3,7 +3,7 @@ package mgtapi
 import (
 	"net/http"
 
-	"github.com/vela-ssoc/manager/broker/blink"
+	"github.com/vela-ssoc/vela-manager/broker/blink"
 	"github.com/xgfone/ship/v5"
 )
 

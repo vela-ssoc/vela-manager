@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/vela-ssoc/manager/model"
+	"github.com/vela-ssoc/backend-common/model"
 	"github.com/xgfone/ship/v5"
 	"gorm.io/gorm"
 )

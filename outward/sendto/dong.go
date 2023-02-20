@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vela-ssoc/manager/libkit/httpclient"
-	"github.com/vela-ssoc/manager/model"
+	"github.com/vela-ssoc/backend-common/model"
+	"github.com/vela-ssoc/vela-manager/libkit/httpclient"
 )
 
 // DongConfigurer 咚咚服务号配置

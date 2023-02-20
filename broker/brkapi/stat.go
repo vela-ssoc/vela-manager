@@ -1,8 +1,6 @@
 package brkapi
 
-import (
-	"github.com/xgfone/ship/v5"
-)
+import "github.com/xgfone/ship/v5"
 
 func Stat() BindRouter {
 	return &statAPI{}

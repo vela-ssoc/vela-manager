@@ -4,8 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/vela-ssoc/manager/inward/evtrsk"
-	"github.com/vela-ssoc/manager/model"
+	"github.com/vela-ssoc/backend-common/model"
+	"github.com/vela-ssoc/vela-manager/inward/evtrsk"
 	"gorm.io/gorm"
 )
 

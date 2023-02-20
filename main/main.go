@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/vela-ssoc/manager/infra/banner"
-	"github.com/vela-ssoc/manager/launch"
+	"github.com/vela-ssoc/vela-manager/infra/banner"
+	"github.com/vela-ssoc/vela-manager/launch"
 )
 
 // main 安全平台管理端

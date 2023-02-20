@@ -1,6 +1,6 @@
 package blink
 
-import "github.com/vela-ssoc/manager/infra/conf"
+import "github.com/vela-ssoc/vela-manager/infra/conf"
 
 type Issue struct {
 	Name     string        `json:"name"`

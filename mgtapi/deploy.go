@@ -1,8 +1,8 @@
 package mgtapi
 
 import (
-	"github.com/vela-ssoc/manager/infra/grid"
-	"github.com/vela-ssoc/manager/model"
+	"github.com/vela-ssoc/backend-common/model"
+	"github.com/vela-ssoc/vela-manager/infra/grid"
 	"github.com/xgfone/ship/v5"
 	"gorm.io/gorm"
 )

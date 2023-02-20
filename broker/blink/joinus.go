@@ -15,11 +15,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vela-ssoc/backend-common/model"
+
 	"github.com/dfcfw/spdy"
-	"github.com/vela-ssoc/manager/infra/conf"
-	"github.com/vela-ssoc/manager/inward/evtrsk"
-	"github.com/vela-ssoc/manager/libkit/httpclient"
-	"github.com/vela-ssoc/manager/model"
+	"github.com/vela-ssoc/vela-manager/infra/conf"
+	"github.com/vela-ssoc/vela-manager/inward/evtrsk"
+	"github.com/vela-ssoc/vela-manager/libkit/httpclient"
 	"gorm.io/gorm"
 )
 
@@ -134,8 +135,8 @@ func (bh *brkHub) Join(tran net.Conn, ident Ident, ret any) error {
 		Executable: ident.Executable,
 		Username:   ident.Username,
 		Hostname:   ident.Hostname,
-		PingAt:     nowAt,
-		JoinAt:     nowAt,
+		PingedAt:   nowAt,
+		JoinedAt:   nowAt,
 	}
 	if err := bh.db.UpdateColumns(tbl).Error; err != nil { // [上线] 修改为在线状态
 		return err

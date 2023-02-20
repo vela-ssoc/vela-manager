@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	txt "text/template"
 
-	"github.com/vela-ssoc/manager/model"
+	"github.com/vela-ssoc/backend-common/model"
 	"gorm.io/gorm"
 )
 

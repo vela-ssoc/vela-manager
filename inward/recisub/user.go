@@ -3,7 +3,7 @@ package recisub
 import (
 	"sync"
 
-	"github.com/vela-ssoc/manager/model"
+	"github.com/vela-ssoc/backend-common/model"
 	"github.com/yuin/gopher-lua"
 )
 

@@ -3,10 +3,10 @@ package broker
 import (
 	"net/http"
 
-	"github.com/vela-ssoc/manager/broker/brkapi"
-	"github.com/vela-ssoc/manager/broker/hanerr"
-	"github.com/vela-ssoc/manager/infra/logback"
-	"github.com/vela-ssoc/manager/libkit/validate"
+	"github.com/vela-ssoc/vela-manager/broker/brkapi"
+	"github.com/vela-ssoc/vela-manager/broker/hanerr"
+	"github.com/vela-ssoc/vela-manager/infra/logback"
+	"github.com/vela-ssoc/vela-manager/libkit/validate"
 	"github.com/xgfone/ship/v5"
 	"gorm.io/gorm"
 )

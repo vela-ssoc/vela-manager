@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/vela-ssoc/manager/infra/conf"
+	"github.com/vela-ssoc/vela-manager/infra/conf"
 )
 
 // daemonHTTP HTTP 服务

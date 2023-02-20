@@ -5,9 +5,9 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/vela-ssoc/manager/inward/plate"
-	"github.com/vela-ssoc/manager/model"
-	"github.com/vela-ssoc/manager/outward/sendto"
+	"github.com/vela-ssoc/backend-common/model"
+	"github.com/vela-ssoc/vela-manager/inward/plate"
+	"github.com/vela-ssoc/vela-manager/outward/sendto"
 	"gorm.io/gorm"
 )
 

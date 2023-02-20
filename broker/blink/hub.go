@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/vela-ssoc/manager/infra/encipher"
+	"github.com/vela-ssoc/vela-manager/infra/encipher"
 )
 
 type Ident struct {
