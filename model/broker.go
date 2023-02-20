@@ -22,8 +22,8 @@ type Broker struct {
 	Hostname   string       `json:"hostname"   gorm:"column:hostname"`      // os.Hostname 节点主机名
 	Workdir    string       `json:"workdir"    gorm:"column:workdir"`       // os.Getwd
 	Executable string       `json:"executable" gorm:"column:executable"`    // os.Executable
-	PingAt     sql.NullTime `json:"ping_at"    gorm:"column:ping_at"`       // 最近一次心跳时间
-	JoinAt     sql.NullTime `json:"join_at"    gorm:"column:join_at"`       // 最近一次上线时间
+	PingedAt   sql.NullTime `json:"pinged_at"  gorm:"column:pinged_at"`     // 最近一次心跳时间
+	JoinedAt   sql.NullTime `json:"joined_at"  gorm:"column:joined_at"`     // 最近一次上线时间
 	CreatedAt  time.Time    `json:"created_at" gorm:"column:created_at"`    // 创建时间
 	UpdatedAt  time.Time    `json:"updated_at" gorm:"column:updated_at"`    // 最近一次更新时间
 }

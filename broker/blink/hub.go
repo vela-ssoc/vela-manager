@@ -30,7 +30,7 @@ type Ident struct {
 }
 
 type Joiner interface {
-	Auth(ident Ident) (any, http.Header, error)
+	Auth(Ident) (any, http.Header, error)
 	Join(net.Conn, Ident, any) error
 }
 

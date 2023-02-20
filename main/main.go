@@ -29,8 +29,8 @@ func main() {
 	defer cancel()
 	log.Println("按 Ctrl+C 结束运行")
 
-	if err := launch.Run(ctx, *cfg); err != nil {
-		log.Println(err)
+	if err := launch.Run(ctx, *cfg); err != nil /*&& err != context.Canceled*/ {
+		log.Printf("程序启动错误：%s", err)
 	}
 
 	log.Println("程序已停止运行")

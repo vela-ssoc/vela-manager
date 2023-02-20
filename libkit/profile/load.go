@@ -17,6 +17,13 @@ func Load(file string, v any) error {
 	}
 	//goland:noinspection GoUnhandledErrorResult
 	defer open.Close()
+	stat, err := os.Stat(file)
+	if err != nil {
+		return err
+	}
+	if stat.IsDir() {
+		file = filepath.Join(file, "manager.yaml")
+	}
 
 	ext := strings.ToLower(filepath.Ext(file))
 	switch ext {

@@ -16,7 +16,7 @@ type blinkCtrl struct {
 }
 
 func (bc *blinkCtrl) BindRoute(anon, _ *ship.RouteGroupBuilder) {
-	anon.Route("/blink").CONNECT(bc.Join)
+	anon.Route("/broker").CONNECT(bc.Join)
 }
 
 func (bc *blinkCtrl) Join(c *ship.Context) error {
