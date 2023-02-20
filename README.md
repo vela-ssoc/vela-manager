@@ -2,14 +2,17 @@
 
 ## 中心端开发部署
 
-> 本项目使用 [multi-module workspaces](https://go.dev/doc/tutorial/workspaces)
-> go.work 
+> 本项目使用 go.work 方式组织项目： [multi-module workspaces](https://go.dev/doc/tutorial/workspaces)
 
 ```shell
 # 创建工作目录
 mkdir vela-ssoc
 
-# 进入中心端工作目录，拉取代码
+# 进入工作目录，拉取代码
+# backend-common: 后端公共代码库
+# vela-manager: 中心端管理端
+# vela-broker: 代理节点
+# vela-minion: agent 节点
 cd vela-ssoc
 git clone https://github.com/vela-ssoc/backend-common.git
 git clone https://github.com/vela-ssoc/vela-manager.git
@@ -21,11 +24,12 @@ go work init
 go work use ./backend-common
 go work use ./vela-manager
 go work use ./vela-broker
+go work use ./vela-minion
 
 # GoLand/IDEA 打开 ssoc-central 目录即可开发 manager 和 broker 模块
 ```
 
-## Go 操作系统支持
+## Go SDK 升级注意事项
 
 2023 年 2 月 1 日，Go 发布了 `Go 1.20` 版本，本项目也第一时间将 Go SDK 升级到了 `Go 1.20`，同时 [Go 1.20 Release Notes](https://go.dev/doc/go1.20) 也告知 `Go 1.20` 将会是最后一个支持 `Windows Server 2008`，`Windows Server 2012` 操作系统的版本。由于当前我们还有运行 `Windows Server 2008`，`Windows Server 2012` 的服务器，为了保证兼容性请 <font color='red'>**谨慎升级 Go SDK 版本**</font>。
 
