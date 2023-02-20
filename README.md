@@ -1,6 +1,6 @@
 # 安全管理平台
 
-## 中心端开发部署
+## 开发前拉取项目
 
 > 本项目使用 go.work 方式组织项目： [multi-module workspaces](https://go.dev/doc/tutorial/workspaces)
 
