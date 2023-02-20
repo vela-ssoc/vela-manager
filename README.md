@@ -21,6 +21,7 @@ go work init
 go work use ./backend-common
 go work use ./vela-manager
 go work use ./vela-broker
+go work use ./vela-minion
 
 # GoLand/IDEA 打开 ssoc-central 目录即可开发 manager 和 broker 模块
 ```
