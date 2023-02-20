@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/vela-manager/broker"
 	"github.com/vela-ssoc/vela-manager/broker/blink"
 	"github.com/vela-ssoc/vela-manager/infra/conf"
@@ -15,7 +16,6 @@ import (
 	"github.com/vela-ssoc/vela-manager/inward/plate"
 	"github.com/vela-ssoc/vela-manager/inward/recisub"
 	"github.com/vela-ssoc/vela-manager/inward/sessm"
-	"github.com/vela-ssoc/vela-manager/libkit/httpclient"
 	"github.com/vela-ssoc/vela-manager/libkit/profile"
 	"github.com/vela-ssoc/vela-manager/libkit/validate"
 	"github.com/vela-ssoc/vela-manager/mgtapi"

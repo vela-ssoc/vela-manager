@@ -15,12 +15,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vela-ssoc/backend-common/model"
-
 	"github.com/dfcfw/spdy"
+	"github.com/vela-ssoc/backend-common/httpclient"
+	"github.com/vela-ssoc/backend-common/model"
 	"github.com/vela-ssoc/vela-manager/infra/conf"
 	"github.com/vela-ssoc/vela-manager/inward/evtrsk"
-	"github.com/vela-ssoc/vela-manager/libkit/httpclient"
 	"gorm.io/gorm"
 )
 
