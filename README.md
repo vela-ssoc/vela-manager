@@ -4,6 +4,8 @@
 
 > 本项目使用 go.work 方式组织项目： [multi-module workspaces](https://go.dev/doc/tutorial/workspaces)
 
+代码拉取命令如下：
+
 ```shell
 # 创建工作目录
 mkdir vela-ssoc
@@ -26,7 +28,7 @@ go work use ./vela-manager
 go work use ./vela-broker
 go work use ./vela-minion
 
-# GoLand/IDEA 打开 ssoc-central 目录即可开发 manager 和 broker 模块
+# 使用 IDE 打开 vela-ssoc 目录即可开发后端模块
 ```
 
 ## Go SDK 升级注意事项
