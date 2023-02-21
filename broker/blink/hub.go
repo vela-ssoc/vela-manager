@@ -32,7 +32,7 @@ var (
 
 type Huber interface {
 	Joiner
-	ResetDB()
+	ResetDB() error
 	Fetch(context.Context, int64, Operator, io.Reader) (*http.Response, error)
 	Through(bid string, op Operator, req *http.Request, res http.ResponseWriter) error
 }
@@ -183,10 +183,11 @@ func (bh *brkHub) Join(tran net.Conn, ident Ident, ret any) error {
 	return nil
 }
 
-func (bh *brkHub) ResetDB() {
-	bh.db.Model(&model.Broker{}).
+func (bh *brkHub) ResetDB() error {
+	return bh.db.Model(&model.Broker{}).
 		Where("status = ?", true).
-		UpdateColumn("status", false)
+		UpdateColumn("status", false).
+		Error
 }
 
 func (bh *brkHub) Fetch(ctx context.Context, id int64, op Operator, body io.Reader) (*http.Response, error) {
