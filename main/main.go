@@ -29,7 +29,7 @@ func main() {
 	defer cancel()
 	log.Println("按 Ctrl+C 结束运行")
 
-	if err := launch.Run(ctx, *cfg); err != nil /*&& err != context.Canceled*/ {
+	if err := launch.Run(ctx, *cfg); err != nil {
 		log.Printf("程序启动错误：%s", err)
 	}
 

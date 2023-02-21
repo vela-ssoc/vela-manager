@@ -3,7 +3,7 @@ package blink
 import (
 	"context"
 
-	"github.com/dfcfw/spdy"
+	"github.com/vela-ssoc/backend-common/spdy"
 )
 
 type Broker interface {

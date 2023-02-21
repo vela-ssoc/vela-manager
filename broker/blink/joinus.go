@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dfcfw/spdy"
 	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/backend-common/model"
+	"github.com/vela-ssoc/backend-common/spdy"
 	"github.com/vela-ssoc/vela-manager/infra/conf"
 	"github.com/vela-ssoc/vela-manager/inward/evtrsk"
 	"gorm.io/gorm"
@@ -104,6 +104,8 @@ func (bh *brkHub) Auth(ident Ident) (any, http.Header, error) {
 func (bh *brkHub) Join(tran net.Conn, ident Ident, ret any) error {
 	issue := ret.(Issue)
 	mux := spdy.Server(tran, spdy.WithEncrypt(issue.Passwd))
+	//goland:noinspection GoUnhandledErrorResult
+	defer mux.Close()
 
 	id := ident.ID
 	conn := &connect{
