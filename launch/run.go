@@ -5,12 +5,12 @@ import (
 	"net/http"
 
 	"github.com/vela-ssoc/backend-common/httpclient"
+	"github.com/vela-ssoc/backend-common/logback"
 	"github.com/vela-ssoc/vela-manager/broker"
 	"github.com/vela-ssoc/vela-manager/broker/blink"
 	"github.com/vela-ssoc/vela-manager/infra/conf"
 	"github.com/vela-ssoc/vela-manager/infra/grid"
 	"github.com/vela-ssoc/vela-manager/infra/hanerr"
-	"github.com/vela-ssoc/vela-manager/infra/logback"
 	"github.com/vela-ssoc/vela-manager/inward/evtrsk"
 	"github.com/vela-ssoc/vela-manager/inward/loadcfg"
 	"github.com/vela-ssoc/vela-manager/inward/plate"
@@ -47,7 +47,7 @@ func Run(parent context.Context, file string) error {
 
 	// ----------[ 根据配置初始化 gorm 日志并连接数据库 ]----------
 	dbCfg := cfg.Database
-	glg := logback.GORM(zap, dbCfg.Level) // 初始化 gorm 日志
+	glg := logback.Gorm(zap, dbCfg.Level) // 初始化 gorm 日志
 	dsn := dbCfg.FormatDSN()              // 获取数据库的 DSN
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: glg})
 	if err != nil {
@@ -116,7 +116,7 @@ func Run(parent context.Context, file string) error {
 	// broker 节点接入相关
 	brk := broker.New(db, valid, slog)
 	hub := blink.Hub(db, notice, brk, cfg)
-	hub.Reset() // 将所有 broker 置为离线状态
+	_ = hub.ResetDB() // 将所有 broker 置为离线状态
 	joiner := blink.Gateway(hub)
 	link := mgtapi.Blink(joiner)
 	link.BindRoute(hostAnon, hostAuth)
@@ -157,7 +157,7 @@ func Run(parent context.Context, file string) error {
 
 	// ----------[ 程序执行结束关闭资源 ]----------
 	_ = daemon.Close() // 关闭 HTTP 服务
-	hub.Reset()        // 将所有 broker 置为离线状态
+	_ = hub.ResetDB()  // 将所有 broker 置为离线状态
 	_ = rawDB.Close()  // 关闭数据库连接
 	_ = zap.Sync()     // sync 日志缓冲区
 
