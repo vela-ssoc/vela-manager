@@ -3,11 +3,8 @@ module github.com/vela-ssoc/vela-manager
 go 1.20
 
 require (
-	github.com/go-playground/locales v0.14.1
-	github.com/go-playground/universal-translator v0.18.1
-	github.com/go-playground/validator/v10 v10.11.2
 	github.com/go-sql-driver/mysql v1.7.0
-	github.com/vela-ssoc/backend-common v0.0.0-20230221070057-599a8f914a4b
+	github.com/vela-ssoc/backend-common v0.0.0-20230222020026-6bfbcd01d63d
 	github.com/xgfone/ship/v5 v5.3.1
 	github.com/yuin/gopher-lua v1.1.0
 	go.uber.org/zap v1.24.0
@@ -19,6 +16,9 @@ require (
 )
 
 require (
+	github.com/go-playground/locales v0.14.1 // indirect
+	github.com/go-playground/universal-translator v0.18.1 // indirect
+	github.com/go-playground/validator/v10 v10.11.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/kr/text v0.2.0 // indirect
