@@ -6,6 +6,7 @@ import (
 
 	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/backend-common/logback"
+	"github.com/vela-ssoc/backend-common/validate"
 	"github.com/vela-ssoc/vela-manager/broker"
 	"github.com/vela-ssoc/vela-manager/broker/blink"
 	"github.com/vela-ssoc/vela-manager/infra/conf"
@@ -17,7 +18,6 @@ import (
 	"github.com/vela-ssoc/vela-manager/inward/recisub"
 	"github.com/vela-ssoc/vela-manager/inward/sessm"
 	"github.com/vela-ssoc/vela-manager/libkit/profile"
-	"github.com/vela-ssoc/vela-manager/libkit/validate"
 	"github.com/vela-ssoc/vela-manager/mgtapi"
 	"github.com/vela-ssoc/vela-manager/middle"
 	"github.com/vela-ssoc/vela-manager/outward/sendto"
