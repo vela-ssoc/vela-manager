@@ -15,7 +15,7 @@ import (
 type Ident struct {
 	ID         int64     `json:"id"`         // ID
 	Secret     string    `json:"secret"`     // 密钥
-	IP         net.IP    `json:"ip"`         // IP 地址
+	Inet       net.IP    `json:"inet"`       // IPv4 地址
 	MAC        string    `json:"mac"`        // MAC 地址
 	Semver     string    `json:"semver"`     // 版本
 	Goos       string    `json:"goos"`       // runtime.GOOS

@@ -4,14 +4,15 @@ import (
 	"context"
 	"net/http"
 
+	"go.uber.org/zap"
+
+	"github.com/vela-ssoc/backend-common/grid"
 	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/backend-common/logback"
 	"github.com/vela-ssoc/backend-common/validate"
-	"github.com/vela-ssoc/vela-manager/broker"
-	"github.com/vela-ssoc/vela-manager/broker/blink"
+	"github.com/vela-ssoc/vela-manager/blink"
+	"github.com/vela-ssoc/vela-manager/brkapi"
 	"github.com/vela-ssoc/vela-manager/infra/conf"
-	"github.com/vela-ssoc/vela-manager/infra/grid"
-	"github.com/vela-ssoc/vela-manager/infra/hanerr"
 	"github.com/vela-ssoc/vela-manager/inward/evtrsk"
 	"github.com/vela-ssoc/vela-manager/inward/loadcfg"
 	"github.com/vela-ssoc/vela-manager/inward/plate"
@@ -42,12 +43,12 @@ func Run(parent context.Context, file string) error {
 		return err
 	}
 	// ----------[ 根据配置文件初始化日志 ]----------
-	zap := cfg.Logger.Zap()    // 根据配置初始化 zap 日志
-	slog := logback.Sugar(zap) // 实例化日志
+	zlg := cfg.Logger.Zap()                                      // 根据配置初始化 zap 日志
+	slog := logback.Sugar(zlg.WithOptions(zap.AddCallerSkip(1))) // 实例化日志
 
 	// ----------[ 根据配置初始化 gorm 日志并连接数据库 ]----------
 	dbCfg := cfg.Database
-	glg := logback.Gorm(zap, dbCfg.Level) // 初始化 gorm 日志
+	glg := logback.Gorm(zlg, dbCfg.Level) // 初始化 gorm 日志
 	dsn := dbCfg.FormatDSN()              // 获取数据库的 DSN
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: glg})
 	if err != nil {
@@ -92,8 +93,8 @@ func Run(parent context.Context, file string) error {
 	downHandler.Logger = slog
 	hostHandler.Validator = valid
 	downHandler.Validator = valid
-	hostHandler.HandleError = hanerr.Handle
-	downHandler.HandleError = hanerr.Handle
+	hostHandler.HandleError = handleError
+	downHandler.HandleError = handleError
 	if dir := srvCfg.HTML; dir != "" {
 		// 设置静态代理目录，downHandler 不用设置，
 		// 设置 vhost 的目的就是为了防止扫描器直接
@@ -114,7 +115,7 @@ func Run(parent context.Context, file string) error {
 	ping.BindRoute(downAnon, downAuth)
 
 	// broker 节点接入相关
-	brk := broker.New(db, valid, slog)
+	brk := brkapi.Handler(db, valid, slog)
 	hub := blink.Hub(db, notice, brk, cfg)
 	_ = hub.ResetDB() // 将所有 broker 置为离线状态
 	joiner := blink.Gateway(hub)
@@ -159,7 +160,7 @@ func Run(parent context.Context, file string) error {
 	_ = daemon.Close() // 关闭 HTTP 服务
 	_ = hub.ResetDB()  // 将所有 broker 置为离线状态
 	_ = rawDB.Close()  // 关闭数据库连接
-	_ = zap.Sync()     // sync 日志缓冲区
+	_ = zlg.Sync()     // sync 日志缓冲区
 
 	return err
 }

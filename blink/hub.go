@@ -70,7 +70,7 @@ type brkHub struct {
 
 // Auth 鉴权授权管理
 func (bh *brkHub) Auth(ident Ident) (any, http.Header, error) {
-	id, secret, inet := ident.ID, ident.Secret, ident.IP
+	id, secret, inet := ident.ID, ident.Secret, ident.Inet
 	if len(inet) == 0 || inet.IsLoopback() {
 		return nil, nil, ErrBrokerInet
 	}
@@ -147,7 +147,7 @@ func (bh *brkHub) Join(tran net.Conn, ident Ident, ret any) error {
 	}()
 
 	// 通知上线
-	inet := ident.IP.String()
+	inet := ident.Inet.String()
 	online := &model.Event{
 		MinionID:  id,
 		Inet:      inet,

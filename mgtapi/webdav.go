@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/vela-ssoc/backend-common/model"
-	"github.com/vela-ssoc/vela-manager/broker/blink"
+	"github.com/vela-ssoc/vela-manager/blink"
 	"github.com/xgfone/ship/v5"
 	"golang.org/x/net/webdav"
 )
