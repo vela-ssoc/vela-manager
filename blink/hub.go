@@ -38,8 +38,7 @@ type Huber interface {
 	CallB(context.Context, opurl.URLer, io.Reader) (*http.Response, error)
 	JSONB(context.Context, opurl.URLer, any, any) error
 	OnewayB(context.Context, opurl.URLer, io.Reader) error
-	ForwardB(opurl.URLer, http.ResponseWriter, *http.Request)
-	ForwardM(opurl.URLer, http.ResponseWriter, *http.Request)
+	Forward(opurl.URLer, http.ResponseWriter, *http.Request)
 }
 
 // Hub broker 节点的连接中心
@@ -227,11 +226,7 @@ func (hub *brkHub) OnewayB(ctx context.Context, op opurl.URLer, body io.Reader) 
 func (hub *brkHub) CallM(ctx context.Context) {
 }
 
-func (hub *brkHub) ForwardB(op opurl.URLer, w http.ResponseWriter, r *http.Request) {
-	hub.proxy.Forward(op, w, r)
-}
-
-func (hub *brkHub) ForwardM(op opurl.URLer, w http.ResponseWriter, r *http.Request) {
+func (hub *brkHub) Forward(op opurl.URLer, w http.ResponseWriter, r *http.Request) {
 	hub.proxy.Forward(op, w, r)
 }
 

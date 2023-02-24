@@ -17,6 +17,5 @@ func (pc *pingCtrl) BindRoute(anon, _ *ship.RouteGroupBuilder) {
 }
 
 func (pc *pingCtrl) Ping(c *ship.Context) error {
-	c.Infof("Ping --->")
 	return c.Text(http.StatusOK, "PONG")
 }
