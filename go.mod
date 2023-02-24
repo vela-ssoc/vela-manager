@@ -4,11 +4,11 @@ go 1.20
 
 require (
 	github.com/go-sql-driver/mysql v1.7.0
-	github.com/vela-ssoc/backend-common v0.0.0-20230222023452-4e6821e224e6
+	github.com/gorilla/websocket v1.5.0
+	github.com/vela-ssoc/backend-common v0.0.0-20230224082447-b3f85cca9bd8
 	github.com/xgfone/ship/v5 v5.3.1
 	github.com/yuin/gopher-lua v1.1.0
 	go.uber.org/zap v1.24.0
-	golang.org/x/net v0.7.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v2 v2.4.0
 	gorm.io/driver/mysql v1.4.7

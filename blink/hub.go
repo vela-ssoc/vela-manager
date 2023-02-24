@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
+
 	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/backend-common/model"
 	"github.com/vela-ssoc/backend-common/opurl"
@@ -39,6 +41,7 @@ type Huber interface {
 	JSONB(context.Context, opurl.URLer, any, any) error
 	OnewayB(context.Context, opurl.URLer, io.Reader) error
 	Forward(opurl.URLer, http.ResponseWriter, *http.Request)
+	Stream(opurl.URLer) (*websocket.Conn, error)
 }
 
 // Hub broker 节点的连接中心
@@ -58,6 +61,7 @@ func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Conf
 	client := httpclient.NewClient(cli)
 	hub.client = client
 	hub.proxy = pubrr.Forward(transport, "manager")
+	hub.stream = pubrr.Stream(hub.dialContext)
 
 	return hub
 }
@@ -70,6 +74,7 @@ type brkHub struct {
 	brokers map[string]*connect
 	client  httpclient.Client
 	proxy   pubrr.Forwarder
+	stream  pubrr.Streamer
 	cfg     conf.Config
 	random  *rand.Rand
 }
@@ -228,6 +233,10 @@ func (hub *brkHub) CallM(ctx context.Context) {
 
 func (hub *brkHub) Forward(op opurl.URLer, w http.ResponseWriter, r *http.Request) {
 	hub.proxy.Forward(op, w, r)
+}
+
+func (hub *brkHub) Stream(op opurl.URLer) (*websocket.Conn, error) {
+	return hub.stream.Stream(op)
 }
 
 // getConn 通过 ID 获取连接
