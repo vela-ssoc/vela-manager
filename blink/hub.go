@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"math/rand"
 	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +17,8 @@ import (
 
 	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/backend-common/model"
+	"github.com/vela-ssoc/backend-common/opurl"
+	"github.com/vela-ssoc/backend-common/pubrr"
 	"github.com/vela-ssoc/backend-common/spdy"
 	"github.com/vela-ssoc/vela-manager/infra/conf"
 	"github.com/vela-ssoc/vela-manager/inward/evtrsk"
@@ -24,17 +26,20 @@ import (
 )
 
 var (
-	ErrBrokerNotFound    = errors.New("broker 节点不存在")
-	ErrBrokerRepeat      = errors.New("broker 节点重复连接")
-	ErrBrokerInet        = errors.New("broker IP 不合法")
-	ErrBrokerUnconnected = errors.New("broker 节点尚未连接")
+	ErrBrokerNotFound = errors.New("broker 节点不存在")
+	ErrBrokerRepeat   = errors.New("broker 节点重复连接")
+	ErrBrokerInet     = errors.New("broker IP 不合法")
+	ErrBrokerOffline  = errors.New("代理节点未上线")
 )
 
 type Huber interface {
 	Joiner
 	ResetDB() error
-	Fetch(context.Context, int64, Operator, io.Reader) (*http.Response, error)
-	Through(bid string, op Operator, req *http.Request, res http.ResponseWriter) error
+	CallB(context.Context, opurl.URLer, io.Reader) (*http.Response, error)
+	JSONB(context.Context, opurl.URLer, any, any) error
+	OnewayB(context.Context, opurl.URLer, io.Reader) error
+	ForwardB(opurl.URLer, http.ResponseWriter, *http.Request)
+	ForwardM(opurl.URLer, http.ResponseWriter, *http.Request)
 }
 
 // Hub broker 节点的连接中心
@@ -45,7 +50,7 @@ func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Conf
 		db:      db,
 		notice:  notice,
 		handler: handler,
-		brokers: make(map[int64]*connect, 16), // 一般不会超过 16 个 broker
+		brokers: make(map[string]*connect, 16), // 一般不会超过 16 个 broker
 		cfg:     cfg,
 		random:  random,
 	}
@@ -53,6 +58,7 @@ func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Conf
 	cli := &http.Client{Transport: transport}
 	client := httpclient.NewClient(cli)
 	hub.client = client
+	hub.proxy = pubrr.Forward(transport, "manager")
 
 	return hub
 }
@@ -62,63 +68,64 @@ type brkHub struct {
 	notice  evtrsk.Handler
 	handler http.Handler
 	mutex   sync.RWMutex
-	brokers map[int64]*connect
+	brokers map[string]*connect
 	client  httpclient.Client
+	proxy   pubrr.Forwarder
 	cfg     conf.Config
 	random  *rand.Rand
 }
 
 // Auth 鉴权授权管理
-func (bh *brkHub) Auth(ident Ident) (any, http.Header, error) {
+func (hub *brkHub) Auth(ident Ident) (Issue, http.Header, error) {
+	var issue Issue
 	id, secret, inet := ident.ID, ident.Secret, ident.Inet
 	if len(inet) == 0 || inet.IsLoopback() {
-		return nil, nil, ErrBrokerInet
+		return issue, nil, ErrBrokerInet
 	}
 
 	// 查询 broker
 	var brk model.Broker
 	ipv4 := inet.String()
-	if err := bh.db.Take(&brk, "id = ? AND inet = ? AND secret = ?", id, ipv4, secret).
+	if err := hub.db.Take(&brk, "id = ? AND inet = ? AND secret = ?", id, ipv4, secret).
 		Error; err != nil {
-		return nil, nil, ErrBrokerNotFound
+		return issue, nil, ErrBrokerNotFound
 	}
-	if brk.Status || bh.getConn(id) != nil {
-		return nil, nil, ErrBrokerRepeat
+	sid := strconv.FormatInt(id, 10)
+	if brk.Status || hub.getConn(sid) != nil {
+		return issue, nil, ErrBrokerRepeat
 	}
 
 	// 随机生成一个 32-64 位的加密密钥
-	psz := bh.random.Intn(33) + 32
+	psz := hub.random.Intn(33) + 32
 	passwd := make([]byte, psz)
-	_, _ = bh.random.Read(passwd)
-	issue := Issue{
-		Name:     brk.Name,
-		Passwd:   passwd,
-		Listen:   Listen{Addr: ":8180"},
-		Logger:   bh.cfg.Logger,
-		Database: bh.cfg.Database,
-	}
+	_, _ = hub.random.Read(passwd)
+
+	issue.Name, issue.Passwd = brk.Name, passwd
+	issue.Listen = Listen{Addr: ":8180"}
+	issue.Logger, issue.Database = hub.cfg.Logger, hub.cfg.Database
 
 	return issue, nil, nil
 }
 
-func (bh *brkHub) Join(tran net.Conn, ident Ident, ret any) error {
-	issue := ret.(Issue)
+func (hub *brkHub) Join(tran net.Conn, ident Ident, issue Issue) error {
 	mux := spdy.Server(tran, spdy.WithEncrypt(issue.Passwd))
 	//goland:noinspection GoUnhandledErrorResult
 	defer mux.Close()
 
 	id := ident.ID
+	sid := strconv.FormatInt(id, 10)
 	conn := &connect{
-		ident:  ident,
-		issue:  issue,
-		waiter: bh,
-		mux:    mux,
+		id:    id,
+		sid:   sid,
+		ident: ident,
+		issue: issue,
+		mux:   mux,
 	}
 
-	if !bh.putConn(conn) { // [上线] 将 connect 存到连接池中
+	if !hub.putConn(conn) { // [上线] 将 connect 存到连接池中
 		return ErrBrokerRepeat
 	}
-	defer bh.delConn(id) // [下线] 删除连接池中的
+	defer hub.delConn(sid) // [下线] 删除连接池中的
 
 	now := time.Now()
 	nowAt := sql.NullTime{Valid: true, Time: now}
@@ -139,11 +146,11 @@ func (bh *brkHub) Join(tran net.Conn, ident Ident, ret any) error {
 		PingedAt:   nowAt,
 		JoinedAt:   nowAt,
 	}
-	if err := bh.db.UpdateColumns(tbl).Error; err != nil { // [上线] 修改为在线状态
+	if err := hub.db.UpdateColumns(tbl).Error; err != nil { // [上线] 修改为在线状态
 		return err
 	}
 	defer func() {
-		bh.db.Model(tbl).Update("status", false) // [下线] 修改为离线状态
+		hub.db.Model(tbl).Update("status", false) // [下线] 修改为离线状态
 	}()
 
 	// 通知上线
@@ -157,10 +164,10 @@ func (bh *brkHub) Join(tran net.Conn, ident Ident, ret any) error {
 		OccurAt:   now,
 		CreatedAt: now,
 	}
-	_ = bh.notice.Event(online)
+	_ = hub.notice.Event(online)
 
 	srv := &http.Server{
-		Handler: bh.handler,
+		Handler: hub.handler,
 		BaseContext: func(net.Listener) context.Context {
 			return context.WithValue(context.Background(), brokerCtxKey, conn)
 		},
@@ -178,96 +185,107 @@ func (bh *brkHub) Join(tran net.Conn, ident Ident, ret any) error {
 		OccurAt:   now,
 		CreatedAt: now,
 	}
-	_ = bh.notice.Event(offline)
+	_ = hub.notice.Event(offline)
 
 	return nil
 }
 
-func (bh *brkHub) ResetDB() error {
-	return bh.db.Model(&model.Broker{}).
+func (hub *brkHub) ResetDB() error {
+	return hub.db.Model(&model.Broker{}).
 		Where("status = ?", true).
 		UpdateColumn("status", false).
 		Error
 }
 
-func (bh *brkHub) Fetch(ctx context.Context, id int64, op Operator, body io.Reader) (*http.Response, error) {
-	req := bh.newRequest(ctx, id, op, body)
-	return bh.client.Fetch(req)
+func (hub *brkHub) CallB(ctx context.Context, op opurl.URLer, body io.Reader) (*http.Response, error) {
+	req := hub.newRequest(ctx, op, body)
+	return hub.client.Fetch(req)
 }
 
-// Through ss
-func (bh *brkHub) Through(bid string, op Operator, req *http.Request, res http.ResponseWriter) error {
-	req.URL.Scheme = "http"
-	req.URL.Host = bid
-	req.URL.Path = op.Path()
-	req.RequestURI = ""
-	ret, err := bh.client.Fetch(req)
+func (hub *brkHub) JSONB(ctx context.Context, op opurl.URLer, body, reply any) error {
+	rd := hub.readJSON(body)
+	req := hub.newRequest(ctx, op, rd)
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	res, err := hub.client.Fetch(req)
 	if err != nil {
 		return err
 	}
-	for k, v := range ret.Header {
-		res.Header().Set(k, strings.Join(v, ", "))
-	}
-	res.WriteHeader(ret.StatusCode)
-	_, err = io.Copy(res, ret.Body)
+	//goland:noinspection GoUnhandledErrorResult
+	defer res.Body.Close()
 
+	return json.NewDecoder(res.Body).Decode(reply)
+}
+
+func (hub *brkHub) OnewayB(ctx context.Context, op opurl.URLer, body io.Reader) error {
+	res, err := hub.CallB(ctx, op, body)
+	if err == nil {
+		_ = res.Body.Close()
+	}
 	return err
 }
 
+func (hub *brkHub) CallM(ctx context.Context) {
+}
+
+func (hub *brkHub) ForwardB(op opurl.URLer, w http.ResponseWriter, r *http.Request) {
+	hub.proxy.Forward(op, w, r)
+}
+
+func (hub *brkHub) ForwardM(op opurl.URLer, w http.ResponseWriter, r *http.Request) {
+	hub.proxy.Forward(op, w, r)
+}
+
 // getConn 通过 ID 获取连接
-func (bh *brkHub) getConn(id int64) *connect {
-	bh.mutex.RLock()
-	conn := bh.brokers[id]
-	bh.mutex.RUnlock()
+func (hub *brkHub) getConn(id string) *connect {
+	hub.mutex.RLock()
+	conn := hub.brokers[id]
+	hub.mutex.RUnlock()
 
 	return conn
 }
 
 // putConn 存入一个 broker 连接
 // false- 连接已经存在，存入失败
-func (bh *brkHub) putConn(conn *connect) bool {
-	id := conn.ID()
-	bh.mutex.Lock()
-	_, exist := bh.brokers[id]
+func (hub *brkHub) putConn(conn *connect) bool {
+	id := conn.sid
+	hub.mutex.Lock()
+	_, exist := hub.brokers[id]
 	if !exist {
-		bh.brokers[id] = conn
+		hub.brokers[id] = conn
 	}
-	bh.mutex.Unlock()
+	hub.mutex.Unlock()
 
 	return !exist
 }
 
 // delConn 删除 broker 连接
-func (bh *brkHub) delConn(id int64) bool {
-	bh.mutex.Lock()
-	_, exist := bh.brokers[id]
+func (hub *brkHub) delConn(id string) bool {
+	hub.mutex.Lock()
+	_, exist := hub.brokers[id]
 	if exist {
-		delete(bh.brokers, id)
+		delete(hub.brokers, id)
 	}
-	bh.mutex.Unlock()
+	hub.mutex.Unlock()
 
 	return exist
 }
 
-func (bh *brkHub) dialContext(_ context.Context, _, addr string) (net.Conn, error) {
-	host, _, err := net.SplitHostPort(addr)
+func (hub *brkHub) dialContext(_ context.Context, _, addr string) (net.Conn, error) {
+	id, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, net.InvalidAddrError(addr)
 	}
-	id, _ := strconv.ParseInt(host, 10, 64)
-	if conn := bh.getConn(id); conn != nil {
+
+	if conn := hub.getConn(id); conn != nil {
 		return conn.mux.Dial()
 	}
 
-	return nil, ErrBrokerUnconnected
+	return nil, ErrBrokerOffline
 }
 
-func (*brkHub) newRequest(ctx context.Context, id int64, op Operator, body io.Reader) *http.Request {
+func (*brkHub) newRequest(ctx context.Context, op opurl.URLer, body io.Reader) *http.Request {
 	method := op.Method()
-	path := op.Path()
-
-	host := strconv.FormatInt(id, 10)
-	addr := &url.URL{Scheme: "http", Host: host, Path: path}
+	addr := op.URL()
 	req := &http.Request{
 		Method:     method,
 		URL:        addr,
@@ -277,9 +295,6 @@ func (*brkHub) newRequest(ctx context.Context, id int64, op Operator, body io.Re
 		Header:     make(http.Header),
 	}
 
-	if v, ok := body.(interface{ Len() int }); ok {
-		req.ContentLength = int64(v.Len())
-	}
 	switch v := body.(type) {
 	case nil:
 	case io.ReadCloser:
@@ -293,6 +308,9 @@ func (*brkHub) newRequest(ctx context.Context, id int64, op Operator, body io.Re
 	default:
 		req.ContentLength = -1
 		req.Body = io.NopCloser(body)
+	}
+	if le, ok := body.(interface{ Len() int }); ok {
+		req.ContentLength = int64(le.Len())
 	}
 
 	// For client requests, Request.ContentLength of 0
@@ -312,4 +330,37 @@ func (*brkHub) newRequest(ctx context.Context, id int64, op Operator, body io.Re
 	}
 
 	return req.WithContext(ctx)
+}
+
+func (*brkHub) readJSON(v any) *jsonReader {
+	if v == nil {
+		return &jsonReader{err: io.EOF}
+	}
+
+	buf := new(bytes.Buffer)
+	err := json.NewEncoder(buf).Encode(v)
+	return &jsonReader{err: err, buf: buf}
+}
+
+type jsonReader struct {
+	err error
+	buf *bytes.Buffer
+}
+
+func (jr *jsonReader) Read(p []byte) (int, error) {
+	if jr.err != nil {
+		return 0, jr.err
+	}
+	return jr.buf.Read(p)
+}
+
+func (jr *jsonReader) Len() int {
+	if jr.err != nil || jr.buf == nil {
+		return 0
+	}
+	return jr.buf.Len()
+}
+
+func (jr *jsonReader) Close() error {
+	return nil
 }

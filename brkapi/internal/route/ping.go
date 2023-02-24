@@ -24,9 +24,6 @@ func (pc *pingCtrl) RegRoute(rgb *ship.RouteGroupBuilder) {
 func (pc *pingCtrl) Ping(c *ship.Context) error {
 	infer := blink.Ctx(c.Request().Context())
 	bid := infer.ID()
-	name := infer.Name()
-	inet := infer.Inet()
-	c.Infof("broker %s(%s) 发来了心跳包", name, inet)
 
 	return pc.db.Model(&model.Broker{ID: bid}).
 		Where("status = ?", true).

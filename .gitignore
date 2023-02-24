@@ -35,3 +35,4 @@ zone/tls/*.jks
 # 其他测试临时目录
 zone/temp/
 zone/log/
+zone/html/

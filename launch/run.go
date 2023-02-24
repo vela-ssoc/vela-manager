@@ -4,11 +4,10 @@ import (
 	"context"
 	"net/http"
 
-	"go.uber.org/zap"
-
 	"github.com/vela-ssoc/backend-common/grid"
 	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/backend-common/logback"
+	"github.com/vela-ssoc/backend-common/pubrr"
 	"github.com/vela-ssoc/backend-common/validate"
 	"github.com/vela-ssoc/vela-manager/blink"
 	"github.com/vela-ssoc/vela-manager/brkapi"
@@ -23,6 +22,7 @@ import (
 	"github.com/vela-ssoc/vela-manager/middle"
 	"github.com/vela-ssoc/vela-manager/outward/sendto"
 	"github.com/xgfone/ship/v5"
+	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -93,8 +93,9 @@ func Run(parent context.Context, file string) error {
 	downHandler.Logger = slog
 	hostHandler.Validator = valid
 	downHandler.Validator = valid
-	hostHandler.HandleError = handleError
-	downHandler.HandleError = handleError
+	node := "manager"
+	hostHandler.HandleError = pubrr.ErrorHandle(node)
+	downHandler.HandleError = pubrr.ErrorHandle(node)
 	if dir := srvCfg.HTML; dir != "" {
 		// 设置静态代理目录，downHandler 不用设置，
 		// 设置 vhost 的目的就是为了防止扫描器直接
@@ -121,8 +122,11 @@ func Run(parent context.Context, file string) error {
 	joiner := blink.Gateway(hub)
 	link := mgtapi.Blink(joiner)
 	link.BindRoute(hostAnon, hostAuth)
-	mgtapi.Attach(hub).BindRoute(hostAnon, hostAuth)
-	mgtapi.WebDAV("/", hub).BindRoute(hostAnon, hostAuth)
+
+	mgtapi.Intob(db, hub).BindRoute(hostAnon, hostAuth)
+	mgtapi.Intom(db, hub).BindRoute(hostAnon, hostAuth)
+	// mgtapi.Attach(hub).BindRoute(hostAnon, hostAuth)
+	// mgtapi.WebDAV("/", hub).BindRoute(hostAnon, hostAuth)
 
 	dep := mgtapi.Deploy(db, gfs)
 	dep.BindRoute(hostAnon, hostAuth)
