@@ -5,15 +5,15 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/vela-ssoc/backend-common/model"
+	"github.com/vela-ssoc/backend-common/netutil"
 	"github.com/vela-ssoc/backend-common/opurl"
-	"github.com/vela-ssoc/backend-common/pubrr"
 	"github.com/vela-ssoc/vela-manager/blink"
 	"github.com/xgfone/ship/v5"
 	"gorm.io/gorm"
 )
 
-func Attach(db *gorm.DB, hub blink.Huber) RouteBinder {
-	upg := pubrr.Upgrade("manager")
+func Attach(db *gorm.DB, hub blink.Huber, node string) RouteBinder {
+	upg := netutil.Upgrade(node)
 
 	return &attachCtrl{
 		db:  db,
@@ -33,6 +33,7 @@ func (ac *attachCtrl) BindRoute(_, auth *ship.RouteGroupBuilder) {
 	auth.Route("/mrr/:arg/*path").Any(ac.Minion(ac.ForwardM)) // http 穿透
 	auth.Route("/bws/:arg/*path").GET(ac.Broker(ac.SocketB))  // socket 穿透
 	auth.Route("/mws/:arg/*path").GET(ac.Minion(ac.SocketM))  // socket 穿透
+	auth.Route("/mgt/")
 }
 
 func (ac *attachCtrl) Broker(fn func(*ship.Context, string, *model.Broker) error) ship.Handler {
@@ -117,7 +118,7 @@ func (ac *attachCtrl) SocketB(c *ship.Context, path string, brk *model.Broker) e
 	//goland:noinspection GoUnhandledErrorResult
 	defer fore.Close()
 
-	pubrr.Pipe(fore, back)
+	netutil.Pipe(fore, back)
 
 	return nil
 }
@@ -143,7 +144,12 @@ func (ac *attachCtrl) SocketM(c *ship.Context, path string, mon *model.Minion) e
 	//goland:noinspection GoUnhandledErrorResult
 	defer fore.Close()
 
-	pubrr.Pipe(fore, back)
+	netutil.Pipe(fore, back)
 
+	return nil
+}
+
+// FM File Manager
+func (ac *attachCtrl) FM(c *ship.Context) error {
 	return nil
 }

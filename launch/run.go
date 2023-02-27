@@ -4,10 +4,11 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/vela-ssoc/backend-common/netutil"
+
 	"github.com/vela-ssoc/backend-common/grid"
 	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/backend-common/logback"
-	"github.com/vela-ssoc/backend-common/pubrr"
 	"github.com/vela-ssoc/backend-common/validate"
 	"github.com/vela-ssoc/vela-manager/blink"
 	"github.com/vela-ssoc/vela-manager/brkapi"
@@ -83,6 +84,7 @@ func Run(parent context.Context, file string) error {
 
 	srvCfg := cfg.Server
 	sess := sessm.DBSess(db, srvCfg.Sess) // session 管理器
+	const nodeName = "manager"
 
 	hostHandler := ship.Default()
 	downHandler := ship.Default()
@@ -93,9 +95,8 @@ func Run(parent context.Context, file string) error {
 	downHandler.Logger = slog
 	hostHandler.Validator = valid
 	downHandler.Validator = valid
-	node := "manager"
-	hostHandler.HandleError = pubrr.ErrorHandle(node)
-	downHandler.HandleError = pubrr.ErrorHandle(node)
+	hostHandler.HandleError = netutil.ErrorFunc(nodeName)
+	downHandler.HandleError = netutil.ErrorFunc(nodeName)
 	if dir := srvCfg.HTML; dir != "" {
 		// 设置静态代理目录，downHandler 不用设置，
 		// 设置 vhost 的目的就是为了防止扫描器直接
@@ -117,7 +118,7 @@ func Run(parent context.Context, file string) error {
 
 	// broker 节点接入相关
 	brk := brkapi.Handler(db, valid, slog)
-	hub := blink.Hub(db, notice, brk, cfg)
+	hub := blink.Hub(db, notice, brk, cfg, nodeName)
 	_ = hub.ResetDB() // 将所有 broker 置为离线状态
 	joiner := blink.Gateway(hub)
 	link := mgtapi.Blink(joiner)
@@ -127,7 +128,7 @@ func Run(parent context.Context, file string) error {
 	// mgtapi.Intom(db, hub).BindRoute(hostAnon, hostAuth)
 	// mgtapi.Attach(hub).BindRoute(hostAnon, hostAuth)
 	// mgtapi.WebDAV("/", hub).BindRoute(hostAnon, hostAuth)
-	mgtapi.Attach(db, hub).BindRoute(hostAnon, hostAuth)
+	mgtapi.Attach(db, hub, nodeName).BindRoute(hostAnon, hostAuth)
 
 	dep := mgtapi.Deploy(db, gfs)
 	dep.BindRoute(hostAnon, hostAuth)
