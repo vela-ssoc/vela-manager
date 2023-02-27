@@ -11,11 +11,15 @@ import (
 	"github.com/vela-ssoc/backend-common/encipher"
 )
 
+// Joiner broker 节点接入
 type Joiner interface {
+	// Auth 开始认证
 	Auth(Ident) (Issue, http.Header, error)
+	// Join 认证成功后接入处理业务逻辑
 	Join(net.Conn, Ident, Issue) error
 }
 
+// Gateway 上线接入网关
 func Gateway(joiner Joiner) http.Handler {
 	return &gateway{joiner: joiner}
 }
@@ -24,6 +28,7 @@ type gateway struct {
 	joiner Joiner
 }
 
+// ServeHTTP 请求接入
 func (gw *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 验证 HTTP 方法
 	if method := r.Method; method != http.MethodConnect {

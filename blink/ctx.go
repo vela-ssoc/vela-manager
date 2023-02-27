@@ -23,6 +23,7 @@ type Infer interface {
 	Issue() Issue
 }
 
+// Ctx 从 http.Request 的 context 中解析出 broker 信息
 func Ctx(ctx context.Context) Infer {
 	if ctx != nil {
 		brk := ctx.Value(brokerCtxKey).(Infer)

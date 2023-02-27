@@ -16,11 +16,10 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-
 	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/backend-common/model"
+	"github.com/vela-ssoc/backend-common/netutil"
 	"github.com/vela-ssoc/backend-common/opurl"
-	"github.com/vela-ssoc/backend-common/pubrr"
 	"github.com/vela-ssoc/backend-common/spdy"
 	"github.com/vela-ssoc/vela-manager/infra/conf"
 	"github.com/vela-ssoc/vela-manager/inward/evtrsk"
@@ -34,18 +33,33 @@ var (
 	ErrBrokerOffline  = errors.New("代理节点未上线")
 )
 
+// Huber broker 接入中心
 type Huber interface {
+	// Joiner broker 上线认证加入接口
 	Joiner
+
+	// ResetDB 将数据库中所有在线的 broker 修改为离线，该接口不会清除 hub 中的连接池，
+	// 故：此方法只适用于程序刚启动时和程序关闭时节点状态归位。
 	ResetDB() error
-	CallB(context.Context, opurl.URLer, io.Reader) (*http.Response, error)
-	JSONB(context.Context, opurl.URLer, any, any) error
-	OnewayB(context.Context, opurl.URLer, io.Reader) error
+
+	// Call 请求调用 broker 节点
+	Call(context.Context, opurl.URLer, io.Reader) (*http.Response, error)
+
+	// JSON 请求调用 broker 节点，请求和响应的数据会进行 json 序列化和反序列化。
+	JSON(context.Context, opurl.URLer, any, any) error
+
+	// Oneway 请求调用 broker 节点，但是不会解析 broker 的响应结果。
+	Oneway(context.Context, opurl.URLer, io.Reader) error
+
+	// Forward 代理模式请求响应。
 	Forward(opurl.URLer, http.ResponseWriter, *http.Request)
+
+	// Stream 建立 websocket.Conn 双向流
 	Stream(opurl.URLer) (*websocket.Conn, error)
 }
 
 // Hub broker 节点的连接中心
-func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Config) Huber {
+func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Config, node string) Huber {
 	random := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	hub := &brkHub{
@@ -60,8 +74,8 @@ func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Conf
 	cli := &http.Client{Transport: transport}
 	client := httpclient.NewClient(cli)
 	hub.client = client
-	hub.proxy = pubrr.Forward(transport, "manager")
-	hub.stream = pubrr.Stream(hub.dialContext)
+	hub.proxy = netutil.Forward(transport, node)
+	hub.stream = netutil.Stream(hub.dialContext)
 
 	return hub
 }
@@ -73,8 +87,8 @@ type brkHub struct {
 	mutex   sync.RWMutex
 	brokers map[string]*connect
 	client  httpclient.Client
-	proxy   pubrr.Forwarder
-	stream  pubrr.Streamer
+	proxy   netutil.Forwarder
+	stream  netutil.Streamer
 	cfg     conf.Config
 	random  *rand.Rand
 }
@@ -194,6 +208,7 @@ func (hub *brkHub) Join(tran net.Conn, ident Ident, issue Issue) error {
 	return nil
 }
 
+// ResetDB 将数据库中在线的 broker 节点修改为离线
 func (hub *brkHub) ResetDB() error {
 	return hub.db.Model(&model.Broker{}).
 		Where("status = ?", true).
@@ -201,12 +216,14 @@ func (hub *brkHub) ResetDB() error {
 		Error
 }
 
-func (hub *brkHub) CallB(ctx context.Context, op opurl.URLer, body io.Reader) (*http.Response, error) {
+// Call 向 broker 节点发送请求
+func (hub *brkHub) Call(ctx context.Context, op opurl.URLer, body io.Reader) (*http.Response, error) {
 	req := hub.newRequest(ctx, op, body)
 	return hub.client.Fetch(req)
 }
 
-func (hub *brkHub) JSONB(ctx context.Context, op opurl.URLer, body, reply any) error {
+// JSON 向 broker 发送 JSON 格式的请求
+func (hub *brkHub) JSON(ctx context.Context, op opurl.URLer, body, reply any) error {
 	rd := hub.readJSON(body)
 	req := hub.newRequest(ctx, op, rd)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
@@ -220,21 +237,21 @@ func (hub *brkHub) JSONB(ctx context.Context, op opurl.URLer, body, reply any) e
 	return json.NewDecoder(res.Body).Decode(reply)
 }
 
-func (hub *brkHub) OnewayB(ctx context.Context, op opurl.URLer, body io.Reader) error {
-	res, err := hub.CallB(ctx, op, body)
+// Oneway 向 broker 发送请求不关心 broker 响应内容
+func (hub *brkHub) Oneway(ctx context.Context, op opurl.URLer, body io.Reader) error {
+	res, err := hub.Call(ctx, op, body)
 	if err == nil {
 		_ = res.Body.Close()
 	}
 	return err
 }
 
-func (hub *brkHub) CallM(ctx context.Context) {
-}
-
+// Forward 代理模式发送请求
 func (hub *brkHub) Forward(op opurl.URLer, w http.ResponseWriter, r *http.Request) {
 	hub.proxy.Forward(op, w, r)
 }
 
+// Stream 通过 websocket 方式建立双向流
 func (hub *brkHub) Stream(op opurl.URLer) (*websocket.Conn, error) {
 	return hub.stream.Stream(op)
 }
