@@ -33,13 +33,12 @@ func (ac *attachCtrl) BindRoute(_, auth *ship.RouteGroupBuilder) {
 	auth.Route("/mrr/:arg/*path").Any(ac.Minion(ac.ForwardM)) // http 穿透
 	auth.Route("/bws/:arg/*path").GET(ac.Broker(ac.SocketB))  // socket 穿透
 	auth.Route("/mws/:arg/*path").GET(ac.Minion(ac.SocketM))  // socket 穿透
-	auth.Route("/mgt/")
 }
 
 func (ac *attachCtrl) Broker(fn func(*ship.Context, string, *model.Broker) error) ship.Handler {
 	return func(c *ship.Context) error {
 		// param 参数既可以是节点 ID 也可以是节点 IP，程序需要判断自适应
-		param := c.Param("param")
+		param := c.Param("arg")
 		path := c.Param("path")
 		ipv4 := net.ParseIP(param).To4()
 		var err error
@@ -104,7 +103,7 @@ func (ac *attachCtrl) SocketB(c *ship.Context, path string, brk *model.Broker) e
 
 	w, r := c.ResponseWriter(), c.Request()
 	op := opurl.MBws(brk.ID, path, r.URL.RawQuery)
-	back, err := ac.hub.Stream(op)
+	back, err := ac.hub.Stream(op, nil)
 	if err != nil {
 		return err
 	}
@@ -125,19 +124,21 @@ func (ac *attachCtrl) SocketB(c *ship.Context, path string, brk *model.Broker) e
 
 func (ac *attachCtrl) SocketM(c *ship.Context, path string, mon *model.Minion) error {
 	if !c.IsWebSocket() {
-		return nil
+		return ship.ErrTooManyRequests
 	}
 
 	w, r := c.ResponseWriter(), c.Request()
 	op := opurl.MMws(mon.BrokerID, mon.ID, path, r.URL.RawQuery)
-	back, err := ac.hub.Stream(op)
+	back, err := ac.hub.Stream(op, nil)
 	if err != nil {
+		c.Warnf("与 minion(%s) 建立 websocket 失败: %v", mon.Inet, err)
 		return err
 	}
 	//goland:noinspection GoUnhandledErrorResult
 	defer back.Close()
+	c.Warnf("与 minion(%s) websocket 隧道已打通", mon.Inet)
 
-	fore, err := ac.upg.Upgrade(w, r, r.Header)
+	fore, err := ac.upg.Upgrade(w, r, nil)
 	if err != nil {
 		return err
 	}

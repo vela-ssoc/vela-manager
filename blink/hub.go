@@ -55,7 +55,7 @@ type Huber interface {
 	Forward(opurl.URLer, http.ResponseWriter, *http.Request)
 
 	// Stream 建立 websocket.Conn 双向流
-	Stream(opurl.URLer) (*websocket.Conn, error)
+	Stream(opurl.URLer, http.Header) (*websocket.Conn, error)
 }
 
 // Hub broker 节点的连接中心
@@ -252,8 +252,8 @@ func (hub *brkHub) Forward(op opurl.URLer, w http.ResponseWriter, r *http.Reques
 }
 
 // Stream 通过 websocket 方式建立双向流
-func (hub *brkHub) Stream(op opurl.URLer) (*websocket.Conn, error) {
-	return hub.stream.Stream(op)
+func (hub *brkHub) Stream(op opurl.URLer, header http.Header) (*websocket.Conn, error) {
+	return hub.stream.Stream(op, header)
 }
 
 // getConn 通过 ID 获取连接
