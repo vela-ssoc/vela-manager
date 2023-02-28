@@ -98,7 +98,7 @@ func (ac *attachCtrl) ForwardM(c *ship.Context, path string, mon *model.Minion) 
 
 func (ac *attachCtrl) SocketB(c *ship.Context, path string, brk *model.Broker) error {
 	if !c.IsWebSocket() {
-		return nil
+		return ship.ErrBadRequest
 	}
 
 	w, r := c.ResponseWriter(), c.Request()
@@ -124,8 +124,10 @@ func (ac *attachCtrl) SocketB(c *ship.Context, path string, brk *model.Broker) e
 
 func (ac *attachCtrl) SocketM(c *ship.Context, path string, mon *model.Minion) error {
 	if !c.IsWebSocket() {
-		return ship.ErrTooManyRequests
+		return ship.ErrBadRequest
 	}
+
+	c.Infof("frontend -> manager -> broker -> minion 正在准备建立双向流隧道")
 
 	w, r := c.ResponseWriter(), c.Request()
 	op := opurl.MMws(mon.BrokerID, mon.ID, path, r.URL.RawQuery)
@@ -136,15 +138,20 @@ func (ac *attachCtrl) SocketM(c *ship.Context, path string, mon *model.Minion) e
 	}
 	//goland:noinspection GoUnhandledErrorResult
 	defer back.Close()
-	c.Warnf("与 minion(%s) websocket 隧道已打通", mon.Inet)
+	c.Infof("broker -> minion 段隧道已经建立成功")
 
 	fore, err := ac.upg.Upgrade(w, r, nil)
 	if err != nil {
+		c.Warnf("与 frontend -> manager upgrade websocket 失败: %v", mon.Inet, err)
 		return err
 	}
 	//goland:noinspection GoUnhandledErrorResult
-	defer fore.Close()
+	defer func() {
+		_ = fore.Close()
+		c.Infof("frontend -> manager -> broker -> minion 隧道已关闭")
+	}()
 
+	c.Infof("frontend -> manager -> broker -> minion  段隧道已经建立成功")
 	netutil.Pipe(fore, back)
 
 	return nil
