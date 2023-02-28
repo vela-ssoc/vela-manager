@@ -17,6 +17,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/vela-ssoc/backend-common/httpclient"
+	"github.com/vela-ssoc/backend-common/logback"
 	"github.com/vela-ssoc/backend-common/model"
 	"github.com/vela-ssoc/backend-common/netutil"
 	"github.com/vela-ssoc/backend-common/opurl"
@@ -59,12 +60,13 @@ type Huber interface {
 }
 
 // Hub broker 节点的连接中心
-func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Config, node string) Huber {
+func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Config, slog logback.Logger, node string) Huber {
 	random := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	hub := &brkHub{
 		db:      db,
 		notice:  notice,
+		slog:    slog,
 		handler: handler,
 		brokers: make(map[string]*connect, 16), // 一般不会超过 16 个 broker
 		cfg:     cfg,
@@ -82,6 +84,7 @@ func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Conf
 
 type brkHub struct {
 	db      *gorm.DB
+	slog    logback.Logger
 	notice  evtrsk.Handler
 	handler http.Handler
 	mutex   sync.RWMutex
@@ -218,16 +221,12 @@ func (hub *brkHub) ResetDB() error {
 
 // Call 向 broker 节点发送请求
 func (hub *brkHub) Call(ctx context.Context, op opurl.URLer, body io.Reader) (*http.Response, error) {
-	req := hub.newRequest(ctx, op, body)
-	return hub.client.Fetch(req)
+	return hub.fetch(ctx, op, nil, body)
 }
 
 // JSON 向 broker 发送 JSON 格式的请求
 func (hub *brkHub) JSON(ctx context.Context, op opurl.URLer, body, reply any) error {
-	rd := hub.readJSON(body)
-	req := hub.newRequest(ctx, op, rd)
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	res, err := hub.client.Fetch(req)
+	res, err := hub.fetchJSON(ctx, op, body)
 	if err != nil {
 		return err
 	}
@@ -253,7 +252,35 @@ func (hub *brkHub) Forward(op opurl.URLer, w http.ResponseWriter, r *http.Reques
 
 // Stream 通过 websocket 方式建立双向流
 func (hub *brkHub) Stream(op opurl.URLer, header http.Header) (*websocket.Conn, error) {
-	return hub.stream.Stream(op, header)
+	addr := op.String()
+	conn, _, err := hub.stream.Stream(addr, header)
+	if err == nil {
+		hub.slog.Infof("建立 stream (%s) 通道成功", addr)
+	} else {
+		hub.slog.Warnf("建立 stream (%s) 通道失败：%s", addr, err)
+	}
+	return conn, err
+}
+
+func (hub *brkHub) fetchJSON(ctx context.Context, op opurl.URLer, val any) (*http.Response, error) {
+	header := http.Header{
+		"Content-Type": []string{"application/json; charset=utf-8"},
+		"Accept":       []string{"application/json"},
+	}
+	body := hub.jsonBody(val)
+	return hub.fetch(ctx, op, header, body)
+}
+
+func (hub *brkHub) fetch(ctx context.Context, op opurl.URLer, header http.Header, body io.Reader) (*http.Response, error) {
+	req := hub.newRequest(ctx, op, header, body)
+	res, err := hub.client.Fetch(req)
+	method, dst := req.Method, req.URL
+	if err != nil {
+		hub.slog.Warnf("发送请求错误：%s %s, %v", method, dst, err)
+	} else {
+		hub.slog.Infof("发送请求成功：%s %s", method, dst)
+	}
+	return res, err
 }
 
 // getConn 通过 ID 获取连接
@@ -304,84 +331,108 @@ func (hub *brkHub) dialContext(_ context.Context, _, addr string) (net.Conn, err
 	return nil, ErrBrokerOffline
 }
 
-func (*brkHub) newRequest(ctx context.Context, op opurl.URLer, body io.Reader) *http.Request {
-	method := op.Method()
-	addr := op.URL()
+func (*brkHub) newRequest(ctx context.Context, op opurl.URLer, header http.Header, body io.Reader) *http.Request {
+	method, dst := op.Method(), op.URL()
+	rc, ok := body.(io.ReadCloser)
+	if !ok && body != nil {
+		rc = io.NopCloser(body)
+	}
 	req := &http.Request{
 		Method:     method,
-		URL:        addr,
+		URL:        dst,
 		Proto:      "HTTP/1.1",
 		ProtoMajor: 1,
 		ProtoMinor: 1,
-		Header:     make(http.Header),
+		Header:     header,
+		Body:       rc,
 	}
-
-	switch v := body.(type) {
-	case nil:
-	case io.ReadCloser:
-		req.Body = v
-	case *bytes.Buffer:
-		req.Body = io.NopCloser(v)
-	case *bytes.Reader:
-		req.Body = io.NopCloser(v)
-	case *strings.Reader:
-		req.Body = io.NopCloser(v)
-	default:
-		req.ContentLength = -1
-		req.Body = io.NopCloser(body)
+	if req.Header == nil {
+		req.Header = make(http.Header)
 	}
-	if le, ok := body.(interface{ Len() int }); ok {
-		req.ContentLength = int64(le.Len())
+	if body != nil {
+		switch v := body.(type) {
+		case *bytes.Buffer:
+			req.ContentLength = int64(v.Len())
+			buf := v.Bytes()
+			req.GetBody = func() (io.ReadCloser, error) {
+				r := bytes.NewReader(buf)
+				return io.NopCloser(r), nil
+			}
+		case *bytes.Reader:
+			req.ContentLength = int64(v.Len())
+			snapshot := *v
+			req.GetBody = func() (io.ReadCloser, error) {
+				r := snapshot
+				return io.NopCloser(&r), nil
+			}
+		case *strings.Reader:
+			req.ContentLength = int64(v.Len())
+			snapshot := *v
+			req.GetBody = func() (io.ReadCloser, error) {
+				r := snapshot
+				return io.NopCloser(&r), nil
+			}
+		case *jsonBody:
+			req.ContentLength = int64(v.Len())
+			req.GetBody = func() (io.ReadCloser, error) {
+				return v, nil
+			}
+		default:
+			// This is where we'd set it to -1 (at least
+			// if body != NoBody) to mean unknown, but
+			// that broke people during the Go 1.8 testing
+			// period. People depend on it being 0 I
+			// guess. Maybe retry later. See Issue 18117.
+		}
+		// For client requests, Request.ContentLength of 0
+		// means either actually 0, or unknown. The only way
+		// to explicitly say that the ContentLength is zero is
+		// to set the Body to nil. But turns out too much code
+		// depends on NewRequest returning a non-nil Body,
+		// so we use a well-known ReadCloser variable instead
+		// and have the http package also treat that sentinel
+		// variable to mean explicitly zero.
+		if req.GetBody != nil && req.ContentLength == 0 {
+			req.Body = http.NoBody
+			req.GetBody = func() (io.ReadCloser, error) { return http.NoBody, nil }
+		}
 	}
-
-	// For client requests, Request.ContentLength of 0
-	// means either actually 0, or unknown. The only way
-	// to explicitly say that the ContentLength is zero is
-	// to set the Body to nil. But turns out too much code
-	// depends on NewRequest returning a non-nil Body,
-	// so we use a well-known ReadCloser variable instead
-	// and have the http package also treat that sentinel
-	// variable to mean explicitly zero.
-	if req.Body != nil && req.ContentLength == 0 {
-		req.Body = http.NoBody
-	}
-
 	if ctx == nil {
 		ctx = context.Background()
 	}
-
 	return req.WithContext(ctx)
 }
 
-func (*brkHub) readJSON(v any) *jsonReader {
+func (*brkHub) jsonBody(v any) *jsonBody {
 	if v == nil {
-		return &jsonReader{err: io.EOF}
+		return nil
 	}
 
 	buf := new(bytes.Buffer)
 	err := json.NewEncoder(buf).Encode(v)
-	return &jsonReader{err: err, buf: buf}
+	return &jsonBody{err: err, buf: buf}
 }
 
-type jsonReader struct {
+type jsonBody struct {
 	err error
 	buf *bytes.Buffer
 }
 
-func (jr *jsonReader) Read(p []byte) (int, error) {
-	if jr.err != nil {
-		return 0, jr.err
+func (jb *jsonBody) Read(p []byte) (int, error) {
+	if jb.err != nil {
+		return 0, jb.err
 	}
-	return jr.buf.Read(p)
+	if jb.buf == nil {
+		return 0, io.EOF
+	}
+	return jb.buf.Read(p)
 }
 
-func (jr *jsonReader) Len() int {
-	if jr.err != nil || jr.buf == nil {
+func (jb *jsonBody) Close() error { return nil }
+
+func (jb *jsonBody) Len() int {
+	if jb.err != nil || jb.buf == nil {
 		return 0
 	}
-	return jr.buf.Len()
-}
-
-func (jr *jsonReader) Close() error {
-	return nil
+	return jb.buf.Len()
 }

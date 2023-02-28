@@ -118,16 +118,12 @@ func Run(parent context.Context, file string) error {
 
 	// broker 节点接入相关
 	brk := brkapi.Handler(db, valid, slog)
-	hub := blink.Hub(db, notice, brk, cfg, nodeName)
+	hub := blink.Hub(db, notice, brk, cfg, slog, nodeName)
 	_ = hub.ResetDB() // 将所有 broker 置为离线状态
 	joiner := blink.Gateway(hub)
 	link := mgtapi.Blink(joiner)
 	link.BindRoute(hostAnon, hostAuth)
 
-	// mgtapi.Intob(db, hub).BindRoute(hostAnon, hostAuth)
-	// mgtapi.Intom(db, hub).BindRoute(hostAnon, hostAuth)
-	// mgtapi.Attach(hub).BindRoute(hostAnon, hostAuth)
-	// mgtapi.WebDAV("/", hub).BindRoute(hostAnon, hostAuth)
 	mgtapi.Attach(db, hub, nodeName).BindRoute(hostAnon, hostAuth)
 
 	dep := mgtapi.Deploy(db, gfs)
