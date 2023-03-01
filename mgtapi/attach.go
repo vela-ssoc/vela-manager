@@ -3,6 +3,8 @@ package mgtapi
 import (
 	"net"
 
+	"github.com/vela-ssoc/backend-common/errno"
+
 	"github.com/gorilla/websocket"
 	"github.com/vela-ssoc/backend-common/model"
 	"github.com/vela-ssoc/backend-common/netutil"
@@ -29,28 +31,34 @@ type attachCtrl struct {
 }
 
 func (ac *attachCtrl) BindRoute(_, auth *ship.RouteGroupBuilder) {
+	// M: manager
+	// B: broker
+	// A: agent
 	auth.Route("/brr/:arg/*path").Any(ac.Broker(ac.ForwardB)) // http 穿透
-	auth.Route("/mrr/:arg/*path").Any(ac.Minion(ac.ForwardM)) // http 穿透
+	auth.Route("/arr/:arg/*path").Any(ac.Minion(ac.ForwardA)) // http 穿透
 	auth.Route("/bws/:arg/*path").GET(ac.Broker(ac.SocketB))  // socket 穿透
-	auth.Route("/mws/:arg/*path").GET(ac.Minion(ac.SocketM))  // socket 穿透
+	auth.Route("/aws/:arg/*path").GET(ac.Minion(ac.SocketA))  // socket 穿透
 }
 
 func (ac *attachCtrl) Broker(fn func(*ship.Context, string, *model.Broker) error) ship.Handler {
 	return func(c *ship.Context) error {
-		// param 参数既可以是节点 ID 也可以是节点 IP，程序需要判断自适应
-		param := c.Param("arg")
+		// arg 参数既可以是节点 ID 也可以是节点 IP，程序需要判断自适应
+		arg := c.Param("arg")
 		path := c.Param("path")
-		ipv4 := net.ParseIP(param).To4()
+		ipv4 := net.ParseIP(arg).To4()
 		var err error
 		brk := new(model.Broker)
 		tx := ac.db.Select("id", "inet", "status")
 		if ipv4 != nil {
 			err = tx.First(brk, "inet = ?", ipv4.String()).Error
 		} else {
-			err = tx.First(brk, "id = ?", param).Error
+			err = tx.First(brk, "id = ?", arg).Error
 		}
 		if err != nil {
-			return err
+			return errno.NodeNotfound(arg)
+		}
+		if !brk.Status {
+			return errno.NodeOffline(brk.ID, brk.Inet)
 		}
 
 		return fn(c, path, brk)
@@ -73,7 +81,15 @@ func (ac *attachCtrl) Minion(fn func(*ship.Context, string, *model.Minion) error
 			err = tx.First(mon, "id = ?", arg).Error
 		}
 		if err != nil {
-			return err
+			return errno.NodeNotfound(arg)
+		}
+		sta := mon.Status
+		if sta == model.MinionInactive {
+			return errno.NodeInactive(mon.ID, mon.Inet)
+		} else if sta == model.MinionOffline {
+			return errno.NodeOffline(mon.ID, mon.Inet)
+		} else if sta == model.MinionRemove {
+			return errno.NodeRemove(mon.ID, mon.Inet)
 		}
 
 		return fn(c, path, mon)
@@ -88,9 +104,9 @@ func (ac *attachCtrl) ForwardB(c *ship.Context, path string, brk *model.Broker) 
 	return nil
 }
 
-func (ac *attachCtrl) ForwardM(c *ship.Context, path string, mon *model.Minion) error {
+func (ac *attachCtrl) ForwardA(c *ship.Context, path string, mon *model.Minion) error {
 	w, r := c.ResponseWriter(), c.Request()
-	op := opurl.MMrr(mon.BrokerID, mon.ID, c.Method(), path, r.URL.RawQuery)
+	op := opurl.MArr(mon.BrokerID, mon.ID, c.Method(), path, r.URL.RawQuery)
 	ac.hub.Forward(op, w, r)
 
 	return nil
@@ -122,7 +138,7 @@ func (ac *attachCtrl) SocketB(c *ship.Context, path string, brk *model.Broker) e
 	return nil
 }
 
-func (ac *attachCtrl) SocketM(c *ship.Context, path string, mon *model.Minion) error {
+func (ac *attachCtrl) SocketA(c *ship.Context, path string, mon *model.Minion) error {
 	if !c.IsWebSocket() {
 		return ship.ErrBadRequest
 	}
@@ -130,7 +146,7 @@ func (ac *attachCtrl) SocketM(c *ship.Context, path string, mon *model.Minion) e
 	c.Infof("frontend -> manager -> broker -> minion 正在准备建立双向流隧道")
 
 	w, r := c.ResponseWriter(), c.Request()
-	op := opurl.MMws(mon.BrokerID, mon.ID, path, r.URL.RawQuery)
+	op := opurl.MAws(mon.BrokerID, mon.ID, path, r.URL.RawQuery)
 	back, err := ac.hub.Stream(op, nil)
 	if err != nil {
 		c.Warnf("与 minion(%s) 建立 websocket 失败: %v", mon.Inet, err)

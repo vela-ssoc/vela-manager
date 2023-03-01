@@ -4,11 +4,10 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/vela-ssoc/backend-common/netutil"
-
 	"github.com/vela-ssoc/backend-common/grid"
 	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/backend-common/logback"
+	"github.com/vela-ssoc/backend-common/netutil"
 	"github.com/vela-ssoc/backend-common/validate"
 	"github.com/vela-ssoc/vela-manager/blink"
 	"github.com/vela-ssoc/vela-manager/brkapi"
@@ -97,6 +96,8 @@ func Run(parent context.Context, file string) error {
 	downHandler.Validator = valid
 	hostHandler.HandleError = netutil.ErrorFunc(nodeName)
 	downHandler.HandleError = netutil.ErrorFunc(nodeName)
+	hostHandler.NotFound = netutil.Notfound(nodeName)
+	downHandler.NotFound = netutil.Notfound(nodeName)
 	if dir := srvCfg.HTML; dir != "" {
 		// 设置静态代理目录，downHandler 不用设置，
 		// 设置 vhost 的目的就是为了防止扫描器直接
