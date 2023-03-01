@@ -12,10 +12,6 @@
 > 3. 基于第 2 点，刚提交完 [backend-common](https://github.com/vela-ssoc/backend-common) 就去其他模块执行 `go get -u`
      依然会提示错误或拉取的不是新版，可能是由于 `GOPROXY`
      代理缓存的原因，有时在 [backend-common](https://github.com/vela-ssoc/backend-common) 提交完毕十几分钟后其他模块才能更新至最新版。
-> 4. 个人感觉 [goproxy.io](https://goproxy.io/)
-     的缓存周期较短，基本上几分钟以内就可拉取到最新版（源码默认 [5*time.Minute](https://github.com/goproxyio/goproxy/blob/303c77b2e6011450be54fd974fda20c50b03140d/main.go#L54)
-     ）；而七牛的 [goproxy.cn](https://goproxy.cn/) 缓存较久，基本上要十几分钟。
-
 
 代码拉取命令如下：
 
@@ -27,19 +23,19 @@ mkdir vela-ssoc
 # backend-common: 后端公共代码库
 # vela-manager: 中心端管理端
 # vela-broker: 代理节点
-# vela-minion: agent 节点
+# vela-tunnel: agent 节点接入的基础通信模块
 cd vela-ssoc
 git clone https://github.com/vela-ssoc/backend-common.git
 git clone https://github.com/vela-ssoc/vela-manager.git
 git clone https://github.com/vela-ssoc/vela-broker.git
-git clone https://github.com/vela-ssoc/vela-minion.git
+git clone https://github.com/vela-ssoc/vela-tunnel.git
 
 # 初始化 go.work
 go work init
 go work use ./backend-common
 go work use ./vela-manager
 go work use ./vela-broker
-go work use ./vela-minion
+go work use ./vela-tunnel
 
 # 使用 IDE 打开 vela-ssoc 目录即可开发后端模块
 ```
