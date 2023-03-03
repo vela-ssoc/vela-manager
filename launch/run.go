@@ -4,8 +4,9 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/vela-ssoc/backend-common/opurl"
+
 	"github.com/vela-ssoc/backend-common/grid"
-	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/backend-common/logback"
 	"github.com/vela-ssoc/backend-common/netutil"
 	"github.com/vela-ssoc/backend-common/validate"
@@ -64,13 +65,14 @@ func Run(parent context.Context, file string) error {
 	rawDB.SetConnMaxLifetime(dbCfg.MaxLifeTime)
 	rawDB.SetConnMaxIdleTime(dbCfg.MaxIdleTime)
 
-	gfs := grid.NewCDN(rawDB, dbCfg.CDN, 0)      // 文件存储模块
-	httpCli := httpclient.NewClient()            // 创建全局公用的 http client
-	rend := plate.DBTmpl(db)                     // 通知模板渲染器
-	dongCfg := loadcfg.Dong(db)                  // 咚咚服务号配置加载器
-	alertCfg := loadcfg.Alert(db)                // 自动化运维告警配置加载器
-	dongSend := sendto.Dong(dongCfg, httpCli)    // 咚咚通知推送客户端
-	alertSend := sendto.Alert(alertCfg, httpCli) // 自动化运维告警推送客户端
+	gfs := grid.NewCDN(rawDB, dbCfg.CDN, 0)              // 文件存储模块
+	hcli := opurl.NewClient(http.DefaultTransport, slog) // 创建全局公用的 http client
+	// httpCli := httpclient.NewClient()                    // 创建全局公用的 http client
+	rend := plate.DBTmpl(db)                  // 通知模板渲染器
+	dongCfg := loadcfg.Dong(db)               // 咚咚服务号配置加载器
+	alertCfg := loadcfg.Alert(db)             // 自动化运维告警配置加载器
+	dongSend := sendto.Dong(dongCfg, hcli)    // 咚咚通知推送客户端
+	alertSend := sendto.Alert(alertCfg, hcli) // 自动化运维告警推送客户端
 
 	dongOpt := sendto.WithDong(dongSend)
 	emailOpt := sendto.WithEmail(alertSend)

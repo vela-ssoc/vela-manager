@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/backend-common/logback"
 	"github.com/vela-ssoc/backend-common/model"
 	"github.com/vela-ssoc/backend-common/netutil"
@@ -43,8 +42,8 @@ type Huber interface {
 	// 故：此方法只适用于程序刚启动时和程序关闭时节点状态归位。
 	ResetDB() error
 
-	// Call 请求调用 broker 节点
-	Call(context.Context, opurl.URLer, io.Reader) (*http.Response, error)
+	// Fetch 请求调用 broker 节点
+	Fetch(context.Context, opurl.URLer, io.Reader) (*http.Response, error)
 
 	// JSON 请求调用 broker 节点，请求和响应的数据会进行 json 序列化和反序列化。
 	JSON(context.Context, opurl.URLer, any, any) error
@@ -73,9 +72,7 @@ func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Conf
 		random:  random,
 	}
 	transport := &http.Transport{DialContext: hub.dialContext}
-	cli := &http.Client{Transport: transport}
-	client := httpclient.NewClient(cli)
-	hub.client = client
+	hub.client = opurl.NewClient(transport, slog)
 	hub.proxy = netutil.Forward(transport, node)
 	hub.stream = netutil.Stream(hub.dialContext)
 
@@ -89,7 +86,7 @@ type brkHub struct {
 	handler http.Handler
 	mutex   sync.RWMutex
 	brokers map[string]*connect
-	client  httpclient.Client
+	client  opurl.Client
 	proxy   netutil.Forwarder
 	stream  netutil.Streamer
 	cfg     conf.Config
@@ -219,26 +216,19 @@ func (hub *brkHub) ResetDB() error {
 		Error
 }
 
-// Call 向 broker 节点发送请求
-func (hub *brkHub) Call(ctx context.Context, op opurl.URLer, body io.Reader) (*http.Response, error) {
-	return hub.fetch(ctx, op, nil, body)
+// Fetch 向 broker 节点发送请求
+func (hub *brkHub) Fetch(ctx context.Context, op opurl.URLer, body io.Reader) (*http.Response, error) {
+	return hub.client.Fetch(ctx, op, nil, body)
 }
 
 // JSON 向 broker 发送 JSON 格式的请求
 func (hub *brkHub) JSON(ctx context.Context, op opurl.URLer, body, reply any) error {
-	res, err := hub.fetchJSON(ctx, op, body)
-	if err != nil {
-		return err
-	}
-	//goland:noinspection GoUnhandledErrorResult
-	defer res.Body.Close()
-
-	return json.NewDecoder(res.Body).Decode(reply)
+	return hub.client.JSON(ctx, op, nil, body, reply)
 }
 
 // Oneway 向 broker 发送请求不关心 broker 响应内容
 func (hub *brkHub) Oneway(ctx context.Context, op opurl.URLer, body io.Reader) error {
-	res, err := hub.Call(ctx, op, body)
+	res, err := hub.client.Fetch(ctx, op, nil, body)
 	if err == nil {
 		_ = res.Body.Close()
 	}
@@ -260,27 +250,6 @@ func (hub *brkHub) Stream(op opurl.URLer, header http.Header) (*websocket.Conn, 
 		hub.slog.Warnf("建立 stream (%s) 通道失败：%s", addr, err)
 	}
 	return conn, err
-}
-
-func (hub *brkHub) fetchJSON(ctx context.Context, op opurl.URLer, val any) (*http.Response, error) {
-	header := http.Header{
-		"Content-Type": []string{"application/json; charset=utf-8"},
-		"Accept":       []string{"application/json"},
-	}
-	body := hub.jsonBody(val)
-	return hub.fetch(ctx, op, header, body)
-}
-
-func (hub *brkHub) fetch(ctx context.Context, op opurl.URLer, header http.Header, body io.Reader) (*http.Response, error) {
-	req := hub.newRequest(ctx, op, header, body)
-	res, err := hub.client.Fetch(req)
-	method, dst := req.Method, req.URL
-	if err != nil {
-		hub.slog.Warnf("发送请求错误：%s %s, %v", method, dst, err)
-	} else {
-		hub.slog.Infof("发送请求成功：%s %s", method, dst)
-	}
-	return res, err
 }
 
 // getConn 通过 ID 获取连接

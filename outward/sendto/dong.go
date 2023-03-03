@@ -2,11 +2,9 @@ package sendto
 
 import (
 	"fmt"
-	"strings"
-	"time"
 
-	"github.com/vela-ssoc/backend-common/httpclient"
 	"github.com/vela-ssoc/backend-common/model"
+	"github.com/vela-ssoc/backend-common/opurl"
 )
 
 // DongConfigurer 咚咚服务号配置
@@ -19,39 +17,43 @@ type DongConfigurer interface {
 }
 
 // Dong 咚咚发送器
-func Dong(configure DongConfigurer, client httpclient.Client) DongSender {
+func Dong(configure DongConfigurer, client opurl.Client) DongSender {
 	return &dongSender{configure: configure, client: client}
 }
 
 type dongSender struct {
 	configure DongConfigurer
-	client    httpclient.Client
+	client    opurl.Client
 }
 
 // SendDong 通过咚咚发送告警/通知
 func (ds *dongSender) SendDong(dongs []string, title, content string) error {
-	dd, err := ds.configure.DongConfig()
-	if err != nil {
-		return err
-	}
+	//dd, err := ds.configure.DongConfig()
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//userIDs := strings.Join(dongs, ",")
+	//req := &dongRequest{UserIDs: userIDs, Title: title, Detail: content}
+	//
+	//opts := []httpclient.Option{
+	//	httpclient.WithHeader("Account", dd.Account),
+	//	httpclient.WithHeader("Token", dd.Token),
+	//	httpclient.WithHost(dd.Host),
+	//	httpclient.WithTimeout(2 * time.Second),
+	//	httpclient.WithRetry(2),
+	//}
+	//context.WithCancel()
+	//
+	//res := new(dongResponse)
+	//ds.client.JSON(nil)
+	//if err = ds.client.PostJSON(nil, dd.Addr, nil, req, res, opts...); err != nil {
+	//	return err
+	//}
+	//
+	//return res.Error()
 
-	userIDs := strings.Join(dongs, ",")
-	req := &dongRequest{UserIDs: userIDs, Title: title, Detail: content}
-
-	opts := []httpclient.Option{
-		httpclient.WithHeader("Account", dd.Account),
-		httpclient.WithHeader("Token", dd.Token),
-		httpclient.WithHost(dd.Host),
-		httpclient.WithTimeout(2 * time.Second),
-		httpclient.WithRetry(2),
-	}
-
-	res := new(dongResponse)
-	if err = ds.client.PostJSON(nil, dd.Addr, nil, req, res, opts...); err != nil {
-		return err
-	}
-
-	return res.Error()
+	return nil
 }
 
 // dongBizCodes 咚咚平台定义的错误码

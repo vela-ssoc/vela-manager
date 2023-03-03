@@ -2,13 +2,10 @@ package sendto
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
-	"net/http"
-	"time"
 
-	"github.com/vela-ssoc/backend-common/httpclient"
+	"github.com/vela-ssoc/backend-common/opurl"
+
 	"github.com/vela-ssoc/backend-common/model"
 )
 
@@ -83,13 +80,13 @@ type AlertSender interface {
 	PhoneSender
 }
 
-func Alert(configure AlertConfigurer, client httpclient.Client) AlertSender {
+func Alert(configure AlertConfigurer, client opurl.Client) AlertSender {
 	return &alertClient{configure: configure, client: client}
 }
 
 type alertClient struct {
 	configure AlertConfigurer
-	client    httpclient.Client
+	client    opurl.Client
 }
 
 func (ac *alertClient) SendEmail(nos []string, title, content string) error {
@@ -168,37 +165,38 @@ func (ac *alertClient) sendPhone(nos []string, content string) error {
 
 // send 通过运维平台发送告警
 func (ac *alertClient) send(r *alertRequest) error {
-	cfg, err := ac.configure.AlertConfig()
-	if err != nil {
-		return err
-	}
-	r.OriginName = cfg.Origin
-	r.AlertType = "ssoc"
-	r.AlertObject = "ssoc"
-	r.AlertAttribute = "ssoc"
-	buf, err := r.JSON()
-	if err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.Addr, buf)
-	if host := cfg.Host; host != "" {
-		req.Host = host
-	}
-
-	res, err := ac.client.Fetch(req)
-	if err != nil {
-		return err
-	}
-	ret := new(alertResponse)
-	err = json.NewDecoder(res.Body).Decode(ret)
-	_ = res.Body.Close()
-	if err == nil && ret.AlertID != 0 && ret.Message == "" {
-		return nil
-	}
-
-	return errors.New(ret.Message)
+	//cfg, err := ac.configure.AlertConfig()
+	//if err != nil {
+	//	return err
+	//}
+	//r.OriginName = cfg.Origin
+	//r.AlertType = "ssoc"
+	//r.AlertObject = "ssoc"
+	//r.AlertAttribute = "ssoc"
+	//buf, err := r.JSON()
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	//defer cancel()
+	//
+	//req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.Addr, buf)
+	//if host := cfg.Host; host != "" {
+	//	req.Host = host
+	//}
+	//
+	//res, err := ac.client.Fetch(req)
+	//if err != nil {
+	//	return err
+	//}
+	//ret := new(alertResponse)
+	//err = json.NewDecoder(res.Body).Decode(ret)
+	//_ = res.Body.Close()
+	//if err == nil && ret.AlertID != 0 && ret.Message == "" {
+	//	return nil
+	//}
+	//
+	//return errors.New(ret.Message)
+	return nil
 }
