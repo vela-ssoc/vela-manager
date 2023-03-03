@@ -1,11 +1,10 @@
 package mgtapi
 
 import (
-	"net"
-
-	"github.com/vela-ssoc/backend-common/errno"
+	"strconv"
 
 	"github.com/gorilla/websocket"
+	"github.com/vela-ssoc/backend-common/errno"
 	"github.com/vela-ssoc/backend-common/model"
 	"github.com/vela-ssoc/backend-common/netutil"
 	"github.com/vela-ssoc/backend-common/opurl"
@@ -45,14 +44,14 @@ func (ac *attachCtrl) Broker(fn func(*ship.Context, string, *model.Broker) error
 		// arg 参数既可以是节点 ID 也可以是节点 IP，程序需要判断自适应
 		arg := c.Param("arg")
 		path := c.Param("path")
-		ipv4 := net.ParseIP(arg).To4()
+		bid, _ := strconv.ParseInt(arg, 10, 64)
 		var err error
 		brk := new(model.Broker)
 		tx := ac.db.Select("id", "inet", "status")
-		if ipv4 != nil {
-			err = tx.First(brk, "inet = ?", ipv4.String()).Error
+		if bid != 0 {
+			err = tx.First(brk, "id = ?", bid).Error
 		} else {
-			err = tx.First(brk, "id = ?", arg).Error
+			err = tx.First(brk, "inet = ?", arg).Error
 		}
 		if err != nil {
 			return errno.NodeNotfound(arg)
@@ -70,15 +69,15 @@ func (ac *attachCtrl) Minion(fn func(*ship.Context, string, *model.Minion) error
 		// arg 参数既可以是节点 ID 也可以是节点 IP，程序需要判断自适应
 		arg := c.Param("arg")
 		path := c.Param("path")
-		ipv4 := net.ParseIP(arg).To4()
+		mid, _ := strconv.ParseInt(arg, 10, 64)
 
 		var err error
 		mon := new(model.Minion)
 		tx := ac.db.Select("id", "inet", "status", "broker_id")
-		if ipv4 != nil {
-			err = tx.First(mon, "inet = ?", ipv4.String()).Error
+		if mid != 0 {
+			err = tx.First(mon, "id = ?", mid).Error
 		} else {
-			err = tx.First(mon, "id = ?", arg).Error
+			err = tx.First(mon, "inet = ?", arg).Error
 		}
 		if err != nil {
 			return errno.NodeNotfound(arg)
