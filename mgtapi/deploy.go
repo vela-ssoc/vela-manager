@@ -23,7 +23,7 @@ func (dep *deployCtrl) BindRoute(anon, _ *ship.RouteGroupBuilder) {
 func (dep *deployCtrl) Broker(c *ship.Context) error {
 	type request struct {
 		Arch   string       `form:"arch"   validate:"oneof=386 amd64 arm arm64"`
-		Goos   string       `form:"goos"   validate:"oneof=linux windows darwin"`
+		Goos   string       `form:"goos"   validate:"oneof=linux windows darwin android"`
 		Semver model.Semver `form:"semver"`
 	}
 	var req request

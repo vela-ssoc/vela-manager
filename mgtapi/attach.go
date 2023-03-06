@@ -171,8 +171,3 @@ func (ac *attachCtrl) SocketA(c *ship.Context, path string, mon *model.Minion) e
 
 	return nil
 }
-
-// FM File Manager
-func (ac *attachCtrl) FM(c *ship.Context) error {
-	return nil
-}
