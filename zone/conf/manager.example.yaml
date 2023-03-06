@@ -2,7 +2,7 @@ server:
   addr: :8443               # http 服务监听地址，如果不填写则 http 为 80，https 为 443
   cert: zone/tls/server.crt # 留空代表启动 http 服务，cert 和 pkey 都有效代表启动 https 服务
   pkey: zone/tls/server.key # 留空代表启动 http 服务，cert 和 pkey 都有效代表启动 https 服务
-  vhosts:                   # vhosts 虚拟主机头，留空代表不校验虚拟主机头
+  vhosts: # vhosts 虚拟主机头，留空代表不校验虚拟主机头
     - 127.0.0.1
     - subdomain.example.com
 
@@ -20,3 +20,13 @@ database:
     parseTime: True
     loc: Local
     timeout: 10s
+
+logger:
+  level: DEBUG
+  console: false
+  directory: zone/log
+  maxsize: 100
+  maxage: 180
+  backup: 0
+  localtime: true
+  compress: true

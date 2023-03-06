@@ -4,21 +4,20 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/vela-ssoc/backend-common/opurl"
-
 	"github.com/vela-ssoc/backend-common/grid"
 	"github.com/vela-ssoc/backend-common/logback"
 	"github.com/vela-ssoc/backend-common/netutil"
+	"github.com/vela-ssoc/backend-common/opurl"
 	"github.com/vela-ssoc/backend-common/validate"
 	"github.com/vela-ssoc/vela-manager/blink"
 	"github.com/vela-ssoc/vela-manager/brkapi"
 	"github.com/vela-ssoc/vela-manager/infra/conf"
+	"github.com/vela-ssoc/vela-manager/infra/profile"
 	"github.com/vela-ssoc/vela-manager/inward/evtrsk"
 	"github.com/vela-ssoc/vela-manager/inward/loadcfg"
 	"github.com/vela-ssoc/vela-manager/inward/plate"
 	"github.com/vela-ssoc/vela-manager/inward/recisub"
 	"github.com/vela-ssoc/vela-manager/inward/sessm"
-	"github.com/vela-ssoc/vela-manager/libkit/profile"
 	"github.com/vela-ssoc/vela-manager/mgtapi"
 	"github.com/vela-ssoc/vela-manager/middle"
 	"github.com/vela-ssoc/vela-manager/outward/sendto"
@@ -67,12 +66,11 @@ func Run(parent context.Context, file string) error {
 
 	gfs := grid.NewCDN(rawDB, dbCfg.CDN, 0)              // 文件存储模块
 	hcli := opurl.NewClient(http.DefaultTransport, slog) // 创建全局公用的 http client
-	// httpCli := httpclient.NewClient()                    // 创建全局公用的 http client
-	rend := plate.DBTmpl(db)                  // 通知模板渲染器
-	dongCfg := loadcfg.Dong(db)               // 咚咚服务号配置加载器
-	alertCfg := loadcfg.Alert(db)             // 自动化运维告警配置加载器
-	dongSend := sendto.Dong(dongCfg, hcli)    // 咚咚通知推送客户端
-	alertSend := sendto.Alert(alertCfg, hcli) // 自动化运维告警推送客户端
+	rend := plate.DBTmpl(db)                             // 通知模板渲染器
+	dongCfg := loadcfg.Dong(db)                          // 咚咚服务号配置加载器
+	alertCfg := loadcfg.Alert(db)                        // 自动化运维告警配置加载器
+	dongSend := sendto.Dong(dongCfg, hcli)               // 咚咚通知推送客户端
+	alertSend := sendto.Alert(alertCfg, hcli)            // 自动化运维告警推送客户端
 
 	dongOpt := sendto.WithDong(dongSend)
 	emailOpt := sendto.WithEmail(alertSend)
