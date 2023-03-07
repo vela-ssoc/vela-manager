@@ -58,6 +58,14 @@ type Huber interface {
 	Stream(opurl.URLer, http.Header) (*websocket.Conn, error)
 }
 
+type name interface {
+	MinionTag()  // POST /arr/cmd
+	MinionTags() // POST /arr/cmd
+	Minion()     // POST /arr/cmd
+	Minions()    // POST /arr/cmd
+	MinionCond() // POST /arr/cmd
+}
+
 // Hub broker 节点的连接中心
 func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Config, slog logback.Logger, node string) Huber {
 	random := rand.New(rand.NewSource(time.Now().UnixNano()))

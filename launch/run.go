@@ -106,8 +106,8 @@ func Run(parent context.Context, file string) error {
 	}
 
 	midAuth := middle.Auth()
-	hostGroup := hostHandler.Group("/api")
-	downGroup := downHandler.Group("/api")
+	hostGroup := hostHandler.Group("/api/v1")
+	downGroup := downHandler.Group("/api/v1")
 	hostAnon := hostGroup.Clone()
 	downAnon := downGroup.Clone()
 	hostAuth := hostGroup.Use(midAuth)
