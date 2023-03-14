@@ -3,7 +3,6 @@ package blink
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -58,14 +57,6 @@ type Huber interface {
 	Stream(opurl.URLer, http.Header) (*websocket.Conn, error)
 }
 
-type name interface {
-	MinionTag()  // POST /arr/cmd
-	MinionTags() // POST /arr/cmd
-	Minion()     // POST /arr/cmd
-	Minions()    // POST /arr/cmd
-	MinionCond() // POST /arr/cmd
-}
-
 // Hub broker 节点的连接中心
 func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Config, slog logback.Logger, node string) Huber {
 	random := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -80,7 +71,7 @@ func Hub(db *gorm.DB, notice evtrsk.Handler, handler http.Handler, cfg conf.Conf
 		random:  random,
 	}
 	transport := &http.Transport{DialContext: hub.dialContext}
-	hub.client = opurl.NewClient(transport, slog)
+	hub.client = opurl.NewClient(transport)
 	hub.proxy = netutil.Forward(transport, node)
 	hub.stream = netutil.Stream(hub.dialContext)
 
@@ -111,8 +102,8 @@ func (hub *brkHub) Auth(ident Ident) (Issue, http.Header, error) {
 
 	// 查询 broker
 	var brk model.Broker
-	ipv4 := inet.String()
-	if err := hub.db.Take(&brk, "id = ? AND inet = ? AND secret = ?", id, ipv4, secret).
+	// ipv4 := inet.String()
+	if err := hub.db.Take(&brk, "id = ? AND secret = ?", id, secret).
 		Error; err != nil {
 		return issue, nil, ErrBrokerNotFound
 	}
@@ -154,23 +145,28 @@ func (hub *brkHub) Join(tran net.Conn, ident Ident, issue Issue) error {
 	defer hub.delConn(sid) // [下线] 删除连接池中的
 
 	now := time.Now()
-	nowAt := sql.NullTime{Valid: true, Time: now}
-	semver := model.Semver(ident.Semver)
+	//nowAt := sql.NullTime{Valid: true, Time: now}
+	//semver := model.Semver(ident.Semver)
+	//tbl := &model.Broker{
+	//	ID:         id,
+	//	MAC:        ident.MAC,
+	//	Goos:       ident.Goos,
+	//	Arch:       ident.Arch,
+	//	CPU:        ident.CPU,
+	//	Semver:     semver,
+	//	Status:     true,
+	//	PID:        ident.PID,
+	//	Workdir:    ident.Workdir,
+	//	Executable: ident.Executable,
+	//	Username:   ident.Username,
+	//	Hostname:   ident.Hostname,
+	//	PingedAt:   nowAt,
+	//	JoinedAt:   nowAt,
+	//}
 	tbl := &model.Broker{
-		ID:         id,
-		MAC:        ident.MAC,
-		Goos:       ident.Goos,
-		Arch:       ident.Arch,
-		CPU:        ident.CPU,
-		Semver:     semver,
-		Status:     true,
-		PID:        ident.PID,
-		Workdir:    ident.Workdir,
-		Executable: ident.Executable,
-		Username:   ident.Username,
-		Hostname:   ident.Hostname,
-		PingedAt:   nowAt,
-		JoinedAt:   nowAt,
+		ID:          id,
+		Status:      true,
+		HeartbeatAt: now,
 	}
 	if err := hub.db.UpdateColumns(tbl).Error; err != nil { // [上线] 修改为在线状态
 		return err

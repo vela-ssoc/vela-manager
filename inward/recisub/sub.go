@@ -1,6 +1,7 @@
 package recisub
 
 import (
+	"log"
 	"sync"
 	"sync/atomic"
 
@@ -105,7 +106,8 @@ func (rs *recSub) find() (model.RecipientMap, model.RecipientMap) {
 	defer rs.done.Store(true)
 
 	var recs model.Recipients
-	rs.db.Find(&recs)
+	err := rs.db.Find(&recs).Error
+	log.Println(err)
 	events, risks := recs.Classify()
 	rs.events = events
 	rs.risks = risks

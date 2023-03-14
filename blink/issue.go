@@ -29,7 +29,7 @@ func (iss Issue) String() string {
 	return string(dat)
 }
 
-// Encrypt 将 Issue 加密
-func (iss Issue) Encrypt() ([]byte, error) {
+// encrypt 将 Issue 加密
+func (iss Issue) encrypt() ([]byte, error) {
 	return encipher.EncryptJSON(iss)
 }

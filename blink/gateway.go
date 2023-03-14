@@ -7,8 +7,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-
-	"github.com/vela-ssoc/backend-common/encipher"
 )
 
 // Joiner broker 节点接入
@@ -39,7 +37,7 @@ func (gw *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	buf := make([]byte, 100*1024)
 	n, _ := io.ReadFull(r.Body, buf)
 	var ident Ident
-	if err := encipher.DecryptJSON(buf[:n], &ident); err != nil {
+	if err := ident.decrypt(buf[:n]); err != nil {
 		gw.writeError(w, http.StatusBadRequest, "认证信息错误")
 		return
 	}
@@ -51,7 +49,7 @@ func (gw *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dat, err := encipher.EncryptJSON(issue)
+	dat, err := issue.encrypt()
 	if err != nil {
 		gw.writeError(w, http.StatusInternalServerError, "内部错误：%s", err.Error())
 		return

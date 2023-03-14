@@ -6,6 +6,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
+// Database 数据库配置
 type Database struct {
 	Level       string            `json:"level"         yaml:"level"`                                  // SQL 日志打印级别
 	CDN         string            `json:"cdn"           yaml:"cdn"`                                    // 文件缓存位置

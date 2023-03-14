@@ -32,7 +32,7 @@ func (ide Ident) String() string {
 	return string(dat)
 }
 
-// Decrypt 将数据解密至 Ident
-func (ide *Ident) Decrypt(enc []byte) error {
+// decrypt 将数据解密至 Ident
+func (ide *Ident) decrypt(enc []byte) error {
 	return encipher.DecryptJSON(enc, ide)
 }

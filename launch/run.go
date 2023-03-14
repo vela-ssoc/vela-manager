@@ -2,75 +2,75 @@ package launch
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 
-	"github.com/vela-ssoc/backend-common/grid"
 	"github.com/vela-ssoc/backend-common/logback"
 	"github.com/vela-ssoc/backend-common/netutil"
 	"github.com/vela-ssoc/backend-common/opurl"
 	"github.com/vela-ssoc/backend-common/validate"
 	"github.com/vela-ssoc/vela-manager/blink"
-	"github.com/vela-ssoc/vela-manager/brkapi"
 	"github.com/vela-ssoc/vela-manager/infra/conf"
+	"github.com/vela-ssoc/vela-manager/infra/dbms"
 	"github.com/vela-ssoc/vela-manager/infra/profile"
 	"github.com/vela-ssoc/vela-manager/inward/evtrsk"
 	"github.com/vela-ssoc/vela-manager/inward/loadcfg"
 	"github.com/vela-ssoc/vela-manager/inward/plate"
 	"github.com/vela-ssoc/vela-manager/inward/recisub"
-	"github.com/vela-ssoc/vela-manager/inward/sessm"
-	"github.com/vela-ssoc/vela-manager/mgtapi"
-	"github.com/vela-ssoc/vela-manager/middle"
 	"github.com/vela-ssoc/vela-manager/outward/sendto"
+	"github.com/vela-ssoc/vela-manager/restful"
+	"github.com/vela-ssoc/vela-manager/restful/mgtapi"
+	"github.com/vela-ssoc/vela-manager/restful/middle"
+	"github.com/vela-ssoc/vela-manager/subunit/session"
 	"github.com/xgfone/ship/v5"
-	"go.uber.org/zap"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
 )
 
-// Run 项目启动
-func Run(parent context.Context, file string) error {
-	ctx, cancel := context.WithCancel(parent)
-	defer cancel()
-
+func Run(ctx context.Context, path string) error {
 	var cfg conf.Config
-	if err := profile.Load(file, &cfg); err != nil { // 加载配置文件
+	if err := profile.Load(path, &cfg); err != nil {
 		return err
 	}
 
-	// ----------[ 校验配置 ]----------
-	valid := validate.New()                     // 参数校验器
-	if err := valid.Validate(cfg); err != nil { // 对加载的配置校验
+	izr := new(initializr)
+
+	return izr.run(ctx, cfg)
+}
+
+type initializr struct {
+	node  string
+	ctx   context.Context
+	cfg   conf.Config
+	valid validate.Validator
+	slog  logback.Logger
+	errch chan<- error
+}
+
+func (izr *initializr) run(ctx context.Context, cfg conf.Config) error {
+	const node = "manager"
+	izr.node, izr.ctx, izr.cfg = node, ctx, cfg
+
+	valid := validate.New()
+	izr.valid = valid
+	if err := valid.Validate(cfg); err != nil { // 校验配置文件
 		return err
 	}
-	// ----------[ 根据配置文件初始化日志 ]----------
-	zlg := cfg.Logger.Zap()                                      // 根据配置初始化 zap 日志
-	slog := logback.Sugar(zlg.WithOptions(zap.AddCallerSkip(1))) // 实例化日志
 
-	// ----------[ 根据配置初始化 gorm 日志并连接数据库 ]----------
-	dbCfg := cfg.Database
-	glg := logback.Gorm(zlg, dbCfg.Level) // 初始化 gorm 日志
-	dsn := dbCfg.FormatDSN()              // 获取数据库的 DSN
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: glg})
+	zlg := cfg.Logger.Zap()
+	db, _, err := dbms.Open(cfg.Database, zlg) // 连接数据库
 	if err != nil {
 		return err
 	}
-	rawDB, err := db.DB()
-	if err != nil {
-		return err
-	}
-	// ----------[ 设置连接参数 ]----------
-	rawDB.SetMaxIdleConns(dbCfg.MaxIdleConn)
-	rawDB.SetMaxOpenConns(dbCfg.MaxOpenConn)
-	rawDB.SetConnMaxLifetime(dbCfg.MaxLifeTime)
-	rawDB.SetConnMaxIdleTime(dbCfg.MaxIdleTime)
 
-	gfs := grid.NewCDN(rawDB, dbCfg.CDN, 0)              // 文件存储模块
-	hcli := opurl.NewClient(http.DefaultTransport, slog) // 创建全局公用的 http client
-	rend := plate.DBTmpl(db)                             // 通知模板渲染器
-	dongCfg := loadcfg.Dong(db)                          // 咚咚服务号配置加载器
-	alertCfg := loadcfg.Alert(db)                        // 自动化运维告警配置加载器
-	dongSend := sendto.Dong(dongCfg, hcli)               // 咚咚通知推送客户端
-	alertSend := sendto.Alert(alertCfg, hcli)            // 自动化运维告警推送客户端
+	slog := logback.Sugar(zlg)
+	izr.slog = slog
+
+	// ----------------------[ 开始依赖注入组装 ]----------------------
+	hcli := opurl.NewClient()
+	rend := plate.DBTmpl(db)                  // 通知模板渲染器
+	dongCfg := loadcfg.Dong(db)               // 咚咚服务号配置加载器
+	alertCfg := loadcfg.Alert(db)             // 自动化运维告警配置加载器
+	dongSend := sendto.Dong(dongCfg, hcli)    // 咚咚通知推送客户端
+	alertSend := sendto.Alert(alertCfg, hcli) // 自动化运维告警推送客户端
 
 	dongOpt := sendto.WithDong(dongSend)
 	emailOpt := sendto.WithEmail(alertSend)
@@ -81,89 +81,95 @@ func Run(parent context.Context, file string) error {
 	subs := recisub.Subscribe(db)                                             // 事件订阅者
 	notice := evtrsk.NewHandle(db, subs, rend, postman)                       // 事件/风险通知处理器
 
-	srvCfg := cfg.Server
-	sess := sessm.DBSess(db, srvCfg.Sess) // session 管理器
-	const nodeName = "manager"
+	sess := session.DBSess(db, cfg.Server.Sess)
+	primary := izr.newShip()
+	special := izr.newShip()
+	primary.Session = sess
+	special.Session = sess
 
-	hostHandler := ship.Default()
-	downHandler := ship.Default()
-
-	hostHandler.Session = sess
-	downHandler.Session = sess
-	hostHandler.Logger = slog
-	downHandler.Logger = slog
-	hostHandler.Validator = valid
-	downHandler.Validator = valid
-	hostHandler.HandleError = netutil.ErrorFunc(nodeName)
-	downHandler.HandleError = netutil.ErrorFunc(nodeName)
-	hostHandler.NotFound = netutil.Notfound(nodeName)
-	downHandler.NotFound = netutil.Notfound(nodeName)
-	if dir := srvCfg.HTML; dir != "" {
-		// 设置静态代理目录，downHandler 不用设置，
-		// 设置 vhost 的目的就是为了防止扫描器直接
-		// 扫描 IP 就将我们的网站扫出来
-		hostHandler.Route("/").Static(dir)
-	}
-
+	midOplog := middle.Oplog(nil)
 	midAuth := middle.Auth()
-	hostGroup := hostHandler.Group("/api/v1")
-	downGroup := downHandler.Group("/api/v1")
-	hostAnon := hostGroup.Clone()
-	downAnon := downGroup.Clone()
-	hostAuth := hostGroup.Use(midAuth)
-	downAuth := downGroup.Use(midAuth)
+	priGroup := primary.Group("/api/v1").Use(midOplog)
+	// specGroup := special.Group("/api/v1").Use(midOplog)
+	priAnon := priGroup.Clone()
+	// specAnon := specGroup.Clone()
+	priAuth := priGroup.Use(midAuth)
+	// specAuth := specGroup.Use(midAuth)
 
-	ping := mgtapi.Ping()
-	ping.BindRoute(hostAnon, hostAuth)
-	ping.BindRoute(downAnon, downAuth)
+	// broker 节点请求处理器
+	bsh := izr.newShip()
+	brk := restful.Brk(bsh, db)
+	hub := blink.Hub(db, notice, brk, cfg, slog, node) // broker 节点连接中心
+	gw := blink.Gateway(hub)                           // broker 上线连接处理器
 
-	// broker 节点接入相关
-	brk := brkapi.Handler(db, valid, slog)
-	hub := blink.Hub(db, notice, brk, cfg, slog, nodeName)
-	_ = hub.ResetDB() // 将所有 broker 置为离线状态
-	joiner := blink.Gateway(hub)
-	link := mgtapi.Blink(joiner)
-	link.BindRoute(hostAnon, hostAuth)
+	mgtapi.Blink(gw).Route(priAnon, priAuth)
+	mgtapi.Into(db, hub, node).Route(priAnon, priAuth)
 
-	mgtapi.Attach(db, hub, nodeName).BindRoute(hostAnon, hostAuth)
+	// ----------------------[ 结束依赖注入组装 ]----------------------
 
-	dep := mgtapi.Deploy(db, gfs)
-	dep.BindRoute(hostAnon, hostAuth)
-	dep.BindRoute(downAnon, downAuth)
-
-	var handler http.Handler
-	if vhosts := srvCfg.Vhosts; len(vhosts) == 0 {
-		handler = hostHandler
-	} else {
-		mana := ship.NewHostManagerHandler(nil)
-		for _, host := range vhosts {
-			if _, err = mana.AddHost(host, hostHandler); err != nil {
-				return err
-			}
-		}
-		mana.SetDefaultHost("", downHandler)
-		handler = mana
+	h, err := izr.vhostHandler(primary, special)
+	if err != nil {
+		return err
 	}
 
-	errCh := make(chan error)
-	daemon := &daemonHTTP{
-		config:  srvCfg,
-		handler: handler,
-		errCh:   errCh,
-	}
-	go daemon.Run() // 运行 HTTP 服务
+	_ = hub.ResetDB()
 
-	// ----------[ 等待错误信息/结束信号 ]----------
+	errch := make(chan error, 1)
+	izr.errch = errch
+	go izr.listen(h)
+
 	select {
-	case err = <-errCh:
 	case <-ctx.Done():
+	case err = <-errch:
 	}
-
-	// ----------[ 程序执行结束关闭资源 ]----------
-	_ = daemon.Close() // 关闭 HTTP 服务
-	_ = hub.ResetDB()  // 将所有 broker 置为离线状态
-	_ = rawDB.Close()  // 关闭数据库连接
-	_ = zlg.Sync()     // sync 日志缓冲区
 
 	return err
+}
+
+func (izr *initializr) listen(h http.Handler) {
+	svc := izr.cfg.Server
+	certs, err := svc.Certs()
+	if err != nil {
+		izr.errch <- err
+		return
+	}
+
+	srv := &http.Server{Handler: h, Addr: svc.Addr}
+	if len(certs) != 0 {
+		srv.TLSConfig = &tls.Config{Certificates: certs}
+		// 配置了 TLSConfig 的 Certificates，certFile 和 keyFile 就可以留空了。
+		// https://github.com/golang/go/blob/23c0121e4eb259cc1087d0f79a0803cbc71f500b/src/crypto/tls/common.go#L1074-L1107
+		err = srv.ListenAndServeTLS("", "")
+	} else {
+		err = srv.ListenAndServe()
+	}
+	izr.errch <- err
+}
+
+func (izr *initializr) newShip() *ship.Ship {
+	const node = "manager"
+	sh := ship.Default()
+	sh.NotFound = netutil.Notfound(node)
+	sh.HandleError = netutil.ErrorFunc(node)
+	sh.Validator = izr.valid
+	sh.Logger = izr.slog
+
+	return sh
+}
+
+func (izr *initializr) vhostHandler(primary, special *ship.Ship) (http.Handler, error) {
+	vhosts := izr.cfg.Server.Vhosts
+	if len(vhosts) == 0 {
+		return primary, nil
+	}
+
+	mana := ship.NewHostManagerHandler(nil)
+	for _, vhost := range vhosts {
+		if _, err := mana.AddHost(vhost, primary); err != nil {
+			return nil, err
+		}
+		mana.SetDefaultHost("", special)
+	}
+
+	return mana, nil
 }

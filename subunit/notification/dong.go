@@ -1,56 +1,9 @@
-package sendto
+package notification
 
-import (
-	"fmt"
-	"net/http"
-	"strings"
+import "fmt"
 
-	"github.com/vela-ssoc/backend-common/model"
-	"github.com/vela-ssoc/backend-common/opurl"
-)
-
-// DongConfigurer 咚咚服务号配置
-type DongConfigurer interface {
-	// DongUnset 重置咚咚配置缓存
-	DongUnset()
-
-	// DongConfig 获取咚咚服务号配置
-	DongConfig() (*model.Dong, error)
-}
-
-// Dong 咚咚发送器
-func Dong(configure DongConfigurer, client opurl.Client) DongSender {
-	return &dongSender{configure: configure, client: client}
-}
-
-type dongSender struct {
-	configure DongConfigurer
-	client    opurl.Client
-}
-
-// SendDong 通过咚咚发送告警/通知
-func (ds *dongSender) SendDong(dongs []string, title, content string) error {
-	dd, err := ds.configure.DongConfig()
-	if err != nil {
-		return err
-	}
-
-	userIDs := strings.Join(dongs, ",")
-	req := &dongRequest{UserIDs: userIDs, Title: title, Detail: content}
-	header := http.Header{
-		"Account": []string{dd.Account},
-		"Token":   []string{dd.Token},
-	}
-	res := new(dongResponse)
-	if err = ds.client.FetchJSON(nil, http.MethodPost, dd.Addr, header, req, res); err != nil {
-		return err
-	}
-
-	return res.Error()
-}
-
-// dongBizCodes 咚咚平台定义的错误码
-var dongBizCodes = map[string]string{
+// dongCodes 咚咚平台定义的错误码
+var dongCodes = map[string]string{
 	"4000009": "未登陆",
 	"4000001": "参数无效",
 	"4000002": "权限不足",
@@ -106,7 +59,7 @@ func (dr dongResponse) Error() error {
 	if code == "200" {
 		return nil
 	}
-	cause := dongBizCodes[code]
+	cause := dongCodes[code]
 
 	return &DongError{
 		Code:  code,

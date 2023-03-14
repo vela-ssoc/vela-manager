@@ -9,37 +9,36 @@ import (
 	"github.com/vela-ssoc/backend-common/netutil"
 	"github.com/vela-ssoc/backend-common/opurl"
 	"github.com/vela-ssoc/vela-manager/blink"
+	"github.com/vela-ssoc/vela-manager/restful/facade"
 	"github.com/xgfone/ship/v5"
 	"gorm.io/gorm"
 )
 
-func Attach(db *gorm.DB, hub blink.Huber, node string) RouteBinder {
+// Into 节点透传调用接口
+func Into(db *gorm.DB, hub blink.Huber, node string) facade.MgtRouter {
 	upg := netutil.Upgrade(node)
 
-	return &attachCtrl{
+	return &intoCtrl{
 		db:  db,
 		hub: hub,
 		upg: upg,
 	}
 }
 
-type attachCtrl struct {
+type intoCtrl struct {
 	db  *gorm.DB
 	hub blink.Huber
 	upg websocket.Upgrader
 }
 
-func (ac *attachCtrl) BindRoute(_, auth *ship.RouteGroupBuilder) {
-	// M: manager
-	// B: broker
-	// A: agent
+func (ac *intoCtrl) Route(_, auth *ship.RouteGroupBuilder) {
 	auth.Route("/brr/:arg/*path").Any(ac.Broker(ac.ForwardB)) // http 穿透
 	auth.Route("/arr/:arg/*path").Any(ac.Minion(ac.ForwardA)) // http 穿透
 	auth.Route("/bws/:arg/*path").GET(ac.Broker(ac.SocketB))  // socket 穿透
 	auth.Route("/aws/:arg/*path").GET(ac.Minion(ac.SocketA))  // socket 穿透
 }
 
-func (ac *attachCtrl) Broker(fn func(*ship.Context, string, *model.Broker) error) ship.Handler {
+func (ac *intoCtrl) Broker(fn func(*ship.Context, string, *model.Broker) error) ship.Handler {
 	return func(c *ship.Context) error {
 		// arg 参数既可以是节点 ID 也可以是节点 IP，程序需要判断自适应
 		arg := c.Param("arg")
@@ -57,14 +56,15 @@ func (ac *attachCtrl) Broker(fn func(*ship.Context, string, *model.Broker) error
 			return errno.NodeNotfound(arg)
 		}
 		if !brk.Status {
-			return errno.NodeOffline(brk.ID, brk.Inet)
+			// return errno.NodeOffline(brk.ID, brk.Inet)
+			return errno.NodeOffline(brk.ID, "")
 		}
 
 		return fn(c, path, brk)
 	}
 }
 
-func (ac *attachCtrl) Minion(fn func(*ship.Context, string, *model.Minion) error) ship.Handler {
+func (ac *intoCtrl) Minion(fn func(*ship.Context, string, *model.Minion) error) ship.Handler {
 	return func(c *ship.Context) error {
 		// arg 参数既可以是节点 ID 也可以是节点 IP，程序需要判断自适应
 		arg := c.Param("arg")
@@ -95,7 +95,7 @@ func (ac *attachCtrl) Minion(fn func(*ship.Context, string, *model.Minion) error
 	}
 }
 
-func (ac *attachCtrl) ForwardB(c *ship.Context, path string, brk *model.Broker) error {
+func (ac *intoCtrl) ForwardB(c *ship.Context, path string, brk *model.Broker) error {
 	w, r := c.ResponseWriter(), c.Request()
 	op := opurl.MBrr(brk.ID, c.Method(), path, r.URL.RawQuery)
 	ac.hub.Forward(op, w, r)
@@ -103,7 +103,7 @@ func (ac *attachCtrl) ForwardB(c *ship.Context, path string, brk *model.Broker) 
 	return nil
 }
 
-func (ac *attachCtrl) ForwardA(c *ship.Context, path string, mon *model.Minion) error {
+func (ac *intoCtrl) ForwardA(c *ship.Context, path string, mon *model.Minion) error {
 	w, r := c.ResponseWriter(), c.Request()
 	op := opurl.MArr(mon.BrokerID, mon.ID, c.Method(), path, r.URL.RawQuery)
 	ac.hub.Forward(op, w, r)
@@ -111,7 +111,7 @@ func (ac *attachCtrl) ForwardA(c *ship.Context, path string, mon *model.Minion) 
 	return nil
 }
 
-func (ac *attachCtrl) SocketB(c *ship.Context, path string, brk *model.Broker) error {
+func (ac *intoCtrl) SocketB(c *ship.Context, path string, brk *model.Broker) error {
 	if !c.IsWebSocket() {
 		return ship.ErrBadRequest
 	}
@@ -122,22 +122,19 @@ func (ac *attachCtrl) SocketB(c *ship.Context, path string, brk *model.Broker) e
 	if err != nil {
 		return err
 	}
-	//goland:noinspection GoUnhandledErrorResult
-	defer back.Close()
 
 	fore, err := ac.upg.Upgrade(w, r, nil)
 	if err != nil {
+		_ = back.Close()
 		return err
 	}
-	//goland:noinspection GoUnhandledErrorResult
-	defer fore.Close()
 
 	netutil.Pipe(fore, back)
 
 	return nil
 }
 
-func (ac *attachCtrl) SocketA(c *ship.Context, path string, mon *model.Minion) error {
+func (ac *intoCtrl) SocketA(c *ship.Context, path string, mon *model.Minion) error {
 	if !c.IsWebSocket() {
 		return ship.ErrBadRequest
 	}
@@ -151,23 +148,18 @@ func (ac *attachCtrl) SocketA(c *ship.Context, path string, mon *model.Minion) e
 		c.Warnf("与 minion(%s) 建立 websocket 失败: %v", mon.Inet, err)
 		return err
 	}
-	//goland:noinspection GoUnhandledErrorResult
-	defer back.Close()
-	c.Infof("broker -> minion 段隧道已经建立成功")
 
+	c.Infof("broker -> minion 段隧道已经建立成功")
 	fore, err := ac.upg.Upgrade(w, r, nil)
 	if err != nil {
+		_ = back.Close()
 		c.Warnf("与 frontend -> manager upgrade websocket 失败: %v", mon.Inet, err)
 		return err
 	}
-	//goland:noinspection GoUnhandledErrorResult
-	defer func() {
-		_ = fore.Close()
-		c.Infof("frontend -> manager -> broker -> minion 隧道已关闭")
-	}()
 
 	c.Infof("frontend -> manager -> broker -> minion  段隧道已经建立成功")
 	netutil.Pipe(fore, back)
+	c.Infof("frontend -> manager -> broker -> minion 隧道已关闭")
 
 	return nil
 }

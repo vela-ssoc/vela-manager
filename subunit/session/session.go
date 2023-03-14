@@ -1,4 +1,4 @@
-package sessm
+package session
 
 import (
 	"crypto/rand"
